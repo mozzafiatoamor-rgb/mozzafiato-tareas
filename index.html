@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12403f">
+<title>Mozzafiato · Tareas</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+:root{
+  --bg:#f6f3ec; --card:#ffffff; --ink:#1c2622; --muted:#6b7770;
+  --line:#e6e0d4; --brand:#12403f; --brand2:#1c605d; --gold:#c8a24a;
+  --ok:#1f9d63; --okbg:#e6f5ec; --warn:#c9503b; --warnbg:#fbeae6;
+  --tm:#2b6cb0; --tv:#7a5cc0; --shadow:0 2px 10px rgba(20,40,38,.07);
+  --r:16px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1513; --card:#161d1b; --ink:#eef2ef; --muted:#9fb0a8;
+    --line:#26302d; --brand:#1c605d; --brand2:#2a807c; --gold:#d8b45e;
+    --okbg:#123120; --warnbg:#3a1c16; --shadow:0 2px 14px rgba(0,0,0,.4);
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg); color:var(--ink); line-height:1.4;
+  padding-bottom:calc(76px + env(safe-area-inset-bottom));
+}
+button,input,select,textarea{font-family:inherit;font-size:16px}
+button{cursor:pointer;border:none;background:none;color:inherit}
+h1,h2,h3{margin:0;font-weight:700}
+.hidden{display:none !important}
+.container{max-width:640px;margin:0 auto;padding:16px}
+
+/* Header */
+header.top{
+  position:sticky;top:0;z-index:20;background:var(--brand);color:#fff;
+  padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
+  display:flex;align-items:center;gap:10px;box-shadow:var(--shadow)
+}
+header.top .logo{width:30px;height:30px;flex:0 0 auto}
+header.top .ttl{font-size:17px;font-weight:800;letter-spacing:.3px}
+header.top .sub{font-size:11px;opacity:.8;margin-top:-2px}
+header.top .spacer{flex:1}
+header.top .chip{background:rgba(255,255,255,.16);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+header.top .chip button{color:#fff;opacity:.85;font-size:12px}
+
+/* Cards / sections */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.section-title{font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:700;margin:22px 4px 8px}
+.muted{color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px}
+.pill.fr{background:#eef1ef;color:var(--brand)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pill.fr{background:#20302d}}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--brand);color:#fff;border-radius:12px;padding:13px 16px;font-weight:700;font-size:15px;width:100%}
+.btn:active{transform:translateY(1px)}
+.btn.ghost{background:transparent;color:var(--brand);border:1.5px solid var(--line)}
+.btn.gold{background:var(--gold);color:#3a2c07}
+.btn.sm{padding:9px 12px;font-size:13px;width:auto;border-radius:10px}
+.btn.danger{background:var(--warnbg);color:var(--warn)}
+
+/* Turno toggle */
+.turno-toggle{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.turno-toggle button{flex:1;padding:9px;border-radius:9px;font-weight:700;font-size:14px;color:var(--muted)}
+.turno-toggle button.active[data-t="TM"]{background:var(--tm);color:#fff}
+.turno-toggle button.active[data-t="TV"]{background:var(--tv);color:#fff}
+
+/* Area tabs */
+.area-scroll{display:flex;gap:8px;overflow-x:auto;padding:2px;scrollbar-width:none}
+.area-scroll::-webkit-scrollbar{display:none}
+.area-tab{white-space:nowrap;padding:8px 14px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-weight:700;font-size:14px}
+.area-tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+
+/* Task rows */
+.task{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--line)}
+.task:last-child{border-bottom:none}
+.task .check{width:30px;height:30px;flex:0 0 auto;border-radius:9px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:18px;color:transparent;background:var(--card)}
+.task.done .check{background:var(--ok);border-color:var(--ok);color:#fff}
+.task .body{flex:1;min-width:0}
+.task .name{font-weight:600;font-size:15px}
+.task.done .name{text-decoration:line-through;color:var(--muted)}
+.task .meta{font-size:12px;color:var(--muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.task .cam{width:40px;height:40px;flex:0 0 auto;border-radius:10px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:18px;background:var(--card)}
+.task .cam.has{background:var(--okbg);border-color:var(--ok)}
+.subhead{padding:9px 14px;background:linear-gradient(0deg,var(--line),transparent);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--brand2)}
+
+/* Progress */
+.progress{height:10px;background:var(--line);border-radius:999px;overflow:hidden}
+.progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--brand2),var(--ok));border-radius:999px;transition:width .3s}
+
+/* Bottom nav */
+nav.tabbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);
+  border-top:1px solid var(--line);display:flex;
+  padding:6px 6px calc(6px + env(safe-area-inset-bottom));
+}
+nav.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;color:var(--muted);font-size:10.5px;font-weight:600;border-radius:12px}
+nav.tabbar button.active{color:var(--brand)}
+nav.tabbar button.active .ic{transform:translateY(-1px)}
+nav.tabbar .ic{font-size:21px;line-height:1}
+
+/* Inputs */
+label.fld{display:block;margin:12px 0}
+label.fld > span{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}
+input,select,textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink)}
+textarea{min-height:70px;resize:vertical}
+
+/* Login */
+.login-wrap{min-height:100dvh;display:flex;flex-direction:column;justify-content:center;padding:24px;gap:16px}
+.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.person{padding:16px 12px;border:1px solid var(--line);border-radius:14px;background:var(--card);text-align:center;box-shadow:var(--shadow)}
+.person .av{width:46px;height:46px;border-radius:50%;margin:0 auto 8px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px}
+.person .rl{font-size:11px;color:var(--muted)}
+.pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:260px;margin:8px auto}
+.pinpad button{padding:16px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-size:22px;font-weight:700}
+.pindots{display:flex;gap:12px;justify-content:center;margin:10px 0}
+.pindots i{width:14px;height:14px;border-radius:50%;background:var(--line)}
+.pindots i.on{background:var(--brand)}
+
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(10,16,14,.5);z-index:60;display:flex;align-items:flex-end;justify-content:center}
+.modal{background:var(--card);width:100%;max-width:640px;border-radius:20px 20px 0 0;padding:18px;max-height:90dvh;overflow:auto;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+.modal h2{font-size:18px;margin-bottom:4px}
+.modal .grab{width:40px;height:4px;background:var(--line);border-radius:999px;margin:0 auto 12px}
+@media(min-width:641px){.modal-bg{align-items:center}.modal{border-radius:20px}}
+
+/* Toast */
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-size:14px;font-weight:600;z-index:100;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:90%;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(-6px)}
+
+/* Evidence gallery */
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.gal .ev{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--card)}
+.gal .ev img{width:100%;height:104px;object-fit:cover;display:block}
+.gal .ev .cap{padding:6px 7px;font-size:10.5px;line-height:1.25}
+.gal .ev .cap b{display:block;font-size:11px}
+
+.empty{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty .big{font-size:40px;margin-bottom:8px}
+.stat{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.stat:last-child{border:none}
+.stat .num{font-weight:800;font-size:16px}
+.bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden;margin-top:6px}
+.bar>i{display:block;height:100%;background:var(--ok)}
+.row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.banner{background:var(--okbg);border:1px solid var(--ok);color:var(--ok);border-radius:12px;padding:10px 12px;font-size:12.5px;font-weight:600;display:flex;gap:8px;align-items:center}
+.banner.demo{background:#fff6e0;border-color:var(--gold);color:#8a6d18}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .banner.demo{background:#2c2410;color:var(--gold)}}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login" class="login-wrap">
+  <div style="text-align:center">
+    <svg class="logo" width="56" height="56" viewBox="0 0 64 64" style="margin:0 auto" aria-hidden="true">
+      <g fill="#12403f">
+        <path d="M32 6c3 6 3 12 0 18-3-6-3-12 0-18z"/>
+        <path d="M32 24c-4-5-9-8-15-9 2 7 7 12 15 14 8-2 13-7 15-14-6 1-11 4-15 9z" opacity=".85"/>
+        <path d="M14 26c-3 5-4 11-3 17 6-2 10-7 12-13-3-1-6-2-9-4z" opacity=".6"/>
+        <path d="M50 26c3 5 4 11 3 17-6-2-10-7-12-13 3-1 6-2 9-4z" opacity=".6"/>
+      </g>
+    </svg>
+    <h1 style="font-size:26px;margin-top:8px">Mozzafiato</h1>
+    <div class="muted" style="font-size:13px">Gestor de tareas y bitácoras</div>
+  </div>
+  <div id="loginStep1">
+    <div class="section-title">¿Quién eres?</div>
+    <div id="peopleList" class="people"></div>
+  </div>
+  <div id="loginStep2" class="hidden" style="text-align:center">
+    <div id="whoAv" class="person av" style="margin:0 auto 6px"></div>
+    <div id="whoName" style="font-weight:800;font-size:18px"></div>
+    <div class="muted" style="font-size:13px;margin-bottom:6px">Ingresa tu PIN</div>
+    <div class="pindots"><i></i><i></i><i></i><i></i></div>
+    <div class="pinpad" id="pinpad"></div>
+    <button class="btn ghost" style="max-width:260px;margin:10px auto 0" onclick="App.backToPeople()">← Cambiar usuario</button>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+  <header class="top">
+    <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+      <g fill="#ffffff">
+        <path d="M32 6c3 6 3 12 0 18-3-6-3-12 0-18z"/>
+        <path d="M32 24c-4-5-9-8-15-9 2 7 7 12 15 14 8-2 13-7 15-14-6 1-11 4-15 9z" opacity=".85"/>
+        <path d="M14 26c-3 5-4 11-3 17 6-2 10-7 12-13-3-1-6-2-9-4z" opacity=".6"/>
+        <path d="M50 26c3 5 4 11 3 17-6-2-10-7-12-13 3-1 6-2 9-4z" opacity=".6"/>
+      </g>
+    </svg>
+    <div>
+      <div class="ttl">Mozzafiato</div>
+      <div class="sub" id="topSub">Tareas</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="chip"><span id="userChip">—</span><button onclick="App.logout()" title="Salir">⏻</button></div>
+  </header>
+
+  <main id="view" class="container"></main>
+
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="hoy" class="active"><span class="ic">✅</span>Hoy</button>
+    <button data-tab="tareas"><span class="ic">📋</span>Tareas</button>
+    <button data-tab="evidencias"><span class="ic">📷</span>Evidencias</button>
+    <button data-tab="reportes"><span class="ic">📊</span>Reportes</button>
+    <button data-tab="equipo"><span class="ic">👥</span>Equipo</button>
+  </nav>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toast"></div>
+
+<script src="app.data.js"></script>
+<script>
+/* =====================================================================
+   CONFIGURACIÓN
+   -------------------------------------------------------------------
+   Para conectar el backend en la nube (Supabase), pega aquí tus 2 llaves.
+   Mientras estén vacías, la app corre en MODO DEMO (datos en este
+   dispositivo). Con las llaves puestas, sincroniza en tiempo real.
+   ===================================================================== */
+const CONFIG = {
+  SUPABASE_URL: '',   // ej: https://xxxxxxxx.supabase.co
+  SUPABASE_KEY: '',   // ej: la "anon public key"
+  NEGOCIO: 'Mozzafiato'
+};
+const CLOUD = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY);
+
+/* =====================================================================
+   UTILIDADES
+   ===================================================================== */
+const $ = (s,el=document)=>el.querySelector(s);
+const $$ = (s,el=document)=>[...el.querySelectorAll(s)];
+const uid = ()=> (crypto.randomUUID?crypto.randomUUID():'id'+Math.random().toString(36).slice(2)+Date.now());
+const pad = n=> String(n).padStart(2,'0');
+const hoyISO = ()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;};
+const fmtFecha = iso=>{const [y,m,d]=iso.split('-');return `${d}/${m}/${y}`;};
+const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const FR_LABEL={1:'Diario',2:'Cada 2 días',3:'Cada 3 días',7:'Domingos',0:'Una vez'};
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600);}
+function turnoActual(){return new Date().getHours()<15?'TM':'TV';}
+function dueOn(fr,iso){
+  if(fr===0) return false;
+  const d=new Date(iso+'T12:00:00');
+  if(fr===1) return true;
+  if(fr===7) return d.getDay()===0;
+  return ((d.getDate()-1)%fr)===0;
+}
+
+/* =====================================================================
+   CAPA DE DATOS  (misma interfaz para DEMO y NUBE)
+   ===================================================================== */
+const LS='mozza_v1';
+const Store = {
+  sb:null,
+  async init(){
+    if(CLOUD){
+      await this._loadSB();
+      this.sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+    } else {
+      this._d = JSON.parse(localStorage.getItem(LS)||'null');
+      if(!this._d){
+        this._d = {
+          colaboradores: SEED.colaboradores.map(c=>({...c})),
+          catalogo: SEED.catalogo.map((c,i)=>({id:'cat_'+i, ...c})),
+          extras: [],
+          completions: [],
+          evidencias: []
+        };
+        this._save();
+      }
+    }
+  },
+  _save(){ if(!CLOUD) localStorage.setItem(LS, JSON.stringify(this._d)); },
+  _loadSB(){ return new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';s.onload=res;s.onerror=rej;document.head.appendChild(s);}); },
+
+  /* ---- Colaboradores ---- */
+  async colaboradores(){
+    if(CLOUD){const {data}=await this.sb.from('colaboradores').select('*').order('nombre');return data||[];}
+    return this._d.colaboradores;
+  },
+  async saveColaborador(c){
+    if(!c.id) c.id=uid();
+    if(CLOUD){await this.sb.from('colaboradores').upsert(c);return c;}
+    const i=this._d.colaboradores.findIndex(x=>x.id===c.id);
+    if(i<0) this._d.colaboradores.push(c); else this._d.colaboradores[i]=c;
+    this._save();return c;
+  },
+  async deleteColaborador(id){
+    if(CLOUD){await this.sb.from('colaboradores').delete().eq('id',id);return;}
+    this._d.colaboradores=this._d.colaboradores.filter(x=>x.id!==id);this._save();
+  },
+
+  /* ---- Catálogo ---- */
+  async catalogo(){
+    if(CLOUD){const {data}=await this.sb.from('catalogo').select('*');return data||[];}
+    return this._d.catalogo;
+  },
+  async saveCatalogo(item){
+    if(!item.id) item.id=uid();
+    if(CLOUD){await this.sb.from('catalogo').upsert(item);return item;}
+    const i=this._d.catalogo.findIndex(x=>x.id===item.id);
+    if(i<0) this._d.catalogo.push(item); else this._d.catalogo[i]=item;
+    this._save();return item;
+  },
+  async deleteCatalogo(id){
+    if(CLOUD){await this.sb.from('catalogo').delete().eq('id',id);return;}
+    this._d.catalogo=this._d.catalogo.filter(x=>x.id!==id);this._save();
+  },
+
+  /* ---- Extras (tareas puntuales) ---- */
+  async extras(){
+    if(CLOUD){const {data}=await this.sb.from('extras').select('*').order('fecha');return data||[];}
+    return this._d.extras;
+  },
+  async saveExtra(t){
+    if(!t.id) t.id=uid();
+    if(CLOUD){await this.sb.from('extras').upsert(t);return t;}
+    const i=this._d.extras.findIndex(x=>x.id===t.id);
+    if(i<0) this._d.extras.push(t); else this._d.extras[i]=t;
+    this._save();return t;
+  },
+  async deleteExtra(id){
+    if(CLOUD){await this.sb.from('extras').delete().eq('id',id);return;}
+    this._d.extras=this._d.extras.filter(x=>x.id!==id);this._save();
+  },
+
+  /* ---- Completions ---- */
+  async completions(){
+    if(CLOUD){const {data}=await this.sb.from('completions').select('*');return data||[];}
+    return this._d.completions;
+  },
+  async setCompletion(rec, on){
+    // rec: {ref, tipo:'cat'|'extra', area, fecha, turno, colaboradorId, colaboradorNombre}
+    const key=`${rec.tipo}:${rec.ref}:${rec.fecha}:${rec.turno}`;
+    if(CLOUD){
+      if(on){await this.sb.from('completions').upsert({...rec,key},{onConflict:'key'});}
+      else {await this.sb.from('completions').delete().eq('key',key);}
+      return;
+    }
+    this._d.completions=this._d.completions.filter(c=>c.key!==key);
+    if(on) this._d.completions.push({...rec,key,ts:Date.now()});
+    this._save();
+  },
+
+  /* ---- Evidencias ---- */
+  async evidencias(){
+    if(CLOUD){const {data}=await this.sb.from('evidencias').select('*').order('ts',{ascending:false});return data||[];}
+    return [...this._d.evidencias].sort((a,b)=>b.ts-a.ts);
+  },
+  async addEvidencia(ev){
+    ev.id=uid();ev.ts=Date.now();
+    if(CLOUD){await this.sb.from('evidencias').insert(ev);return ev;}
+    this._d.evidencias.push(ev);
+    // límite para no llenar el almacenamiento del dispositivo en demo
+    if(this._d.evidencias.length>120) this._d.evidencias=this._d.evidencias.slice(-120);
+    this._save();return ev;
+  },
+  async deleteEvidencia(id){
+    if(CLOUD){await this.sb.from('evidencias').delete().eq('id',id);return;}
+    this._d.evidencias=this._d.evidencias.filter(x=>x.id!==id);this._save();
+  }
+};
+
+/* =====================================================================
+   APP
+   ===================================================================== */
+const App = {
+  user:null, tab:'hoy', area:'barra', turno:turnoActual(), fecha:hoyISO(),
+  _pin:'', _who:null, _cache:{},
+
+  async start(){
+    await Store.init();
+    const saved=JSON.parse(localStorage.getItem('mozza_user')||'null');
+    await this.renderLogin();
+    if(saved){ this.user=saved; this.enterApp(); }
+    if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+    // tabbar
+    $$('#tabbar button').forEach(b=>b.onclick=()=>this.go(b.dataset.tab));
+  },
+
+  /* ---------- LOGIN ---------- */
+  async renderLogin(){
+    const cols=await Store.colaboradores();
+    $('#peopleList').innerHTML=cols.map(c=>`
+      <button class="person" onclick="App.pickPerson('${c.id}')">
+        <div class="av">${esc(iniciales(c.nombre))}</div>
+        <div style="font-weight:700;font-size:14px">${esc(c.nombre)}</div>
+        <div class="rl">${c.rol==='encargado'?'Encargado':'Colaborador'}${c.area?' · '+areaName(c.area):''}</div>
+      </button>`).join('');
+    // pinpad
+    $('#pinpad').innerHTML=[1,2,3,4,5,6,7,8,9].map(n=>`<button onclick="App.pin('${n}')">${n}</button>`).join('')
+      +`<button onclick="App.pinDel()">⌫</button><button onclick="App.pin('0')">0</button><button onclick="App.pinOk()">✓</button>`;
+  },
+  async pickPerson(id){
+    const cols=await Store.colaboradores();
+    this._who=cols.find(c=>c.id===id); this._pin='';
+    $('#loginStep1').classList.add('hidden');
+    $('#loginStep2').classList.remove('hidden');
+    $('#whoAv').textContent=iniciales(this._who.nombre);
+    $('#whoName').textContent=this._who.nombre;
+    this._drawDots();
+  },
+  backToPeople(){$('#loginStep2').classList.add('hidden');$('#loginStep1').classList.remove('hidden');this._pin='';},
+  pin(n){ if(this._pin.length<4){this._pin+=n;this._drawDots(); if(this._pin.length===4) setTimeout(()=>this.pinOk(),150);} },
+  pinDel(){this._pin=this._pin.slice(0,-1);this._drawDots();},
+  _drawDots(){$$('.pindots i').forEach((d,i)=>d.classList.toggle('on',i<this._pin.length));},
+  pinOk(){
+    if(this._pin===this._who.pin){
+      this.user=this._who; localStorage.setItem('mozza_user',JSON.stringify(this.user));
+      this.enterApp();
+    } else { toast('PIN incorrecto'); this._pin=''; this._drawDots(); navigator.vibrate&&navigator.vibrate(120); }
+  },
+  logout(){ localStorage.removeItem('mozza_user'); location.reload(); },
+
+  enterApp(){
+    $('#login').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    $('#userChip').textContent=this.user.nombre.split(' ')[0];
+    // colaboradores ven solo su área; encargados ven todas
+    if(this.user.rol==='colaborador' && this.user.area) this.area=this.user.area;
+    // ocultar pestañas de gestión a colaboradores
+    const mgr=this.user.rol==='encargado';
+    $$('#tabbar button').forEach(b=>{
+      if(['equipo'].includes(b.dataset.tab)) b.classList.toggle('hidden',!mgr);
+    });
+    this.go('hoy');
+  },
+
+  go(tab){
+    this.tab=tab;
+    $$('#tabbar button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+    ({hoy:'Tareas de hoy',tareas:'Gestión de tareas',evidencias:'Evidencias',reportes:'Reportes',equipo:'Equipo'});
+    $('#topSub').textContent={hoy:'Tareas de hoy',tareas:'Gestión de tareas',evidencias:'Evidencias',reportes:'Reportes',equipo:'Equipo'}[tab];
+    this['view_'+tab]();
+  },
+
+  /* ---------- VISTA: HOY ---------- */
+  async view_hoy(){
+    const v=$('#view');
+    const mgr=this.user.rol==='encargado';
+    const [cat, comps, extras] = await Promise.all([Store.catalogo(),Store.completions(),Store.extras()]);
+    const areas=SEED.areas;
+    const areaTabs = mgr ? `<div class="area-scroll" style="margin-bottom:12px">${
+        areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setArea('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')
+      }</div>` : '';
+
+    const dueCat = cat.filter(c=>c.area===this.area && dueOn(c.fr,this.fecha));
+    const todayExtras = extras.filter(e=>e.area===this.area && e.fecha===this.fecha);
+
+    // agrupar por sección
+    const secciones={};
+    dueCat.forEach(c=>{(secciones[c.seccion]=secciones[c.seccion]||[]).push(c);});
+
+    const isDone=(tipo,ref)=>comps.some(x=>x.tipo===tipo&&x.ref===ref&&x.fecha===this.fecha&&x.turno===this.turno);
+    const evOf=(tipo,ref)=>comps.find(x=>x.tipo===tipo&&x.ref===ref&&x.fecha===this.fecha&&x.turno===this.turno&&x.evid);
+
+    let total=0,done=0;
+    const rowCat=c=>{const d=isDone('cat',c.id);total++;if(d)done++;return taskRow('cat',c,c.nombre,d,evOf('cat',c.id));};
+
+    let secHTML='';
+    for(const s in secciones){
+      secHTML+=`<div class="subhead">${esc(s)}</div>`+secciones[s].map(rowCat).join('');
+    }
+
+    let extrasHTML='';
+    if(todayExtras.length){
+      extrasHTML=`<div class="section-title">Tareas puntuales de hoy</div><div class="card">`+
+        todayExtras.map(e=>{const d=isDone('extra',e.id);total++;if(d)done++;
+          return taskRow('extra',e,e.nombre+(e.asignadoNombre?` · 👤 ${esc(e.asignadoNombre)}`:''),d,evOf('extra',e.id));}).join('')+`</div>`;
+    }
+
+    const pct= total? Math.round(done/total*100):0;
+    v.innerHTML=`
+      ${areaTabs}
+      <div class="card" style="padding:14px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div><b style="font-size:15px">${areaName(this.area)}</b><div class="muted" style="font-size:12px">${diaTexto(this.fecha)}</div></div>
+          <div style="text-align:right"><div style="font-weight:800;font-size:20px">${done}/${total}</div><div class="muted" style="font-size:11px">completadas</div></div>
+        </div>
+        <div class="progress"><i style="width:${pct}%"></i></div>
+      </div>
+      <div class="turno-toggle" style="margin:12px 0">
+        <button data-t="TM" class="${this.turno==='TM'?'active':''}" onclick="App.setTurno('TM')">☀️ Turno mañana</button>
+        <button data-t="TV" class="${this.turno==='TV'?'active':''}" onclick="App.setTurno('TV')">🌙 Turno tarde</button>
+      </div>
+      ${extrasHTML}
+      <div class="section-title">Checklist · ${areaName(this.area)}</div>
+      <div class="card">${secHTML||'<div class="empty"><div class="big">🎉</div>No hay actividades programadas para hoy en esta área.</div>'}</div>
+      ${mgr?`<button class="btn ghost" style="margin-top:14px" onclick="App.modalNuevaTarea()">＋ Asignar tarea puntual</button>`:''}
+      <div style="height:20px"></div>`;
+  },
+  setArea(a){this.area=a;this.view_hoy();},
+  setTurno(t){this.turno=t;this.view_hoy();},
+
+  async toggle(tipo,ref){
+    const [cat,extras]=await Promise.all([Store.catalogo(),Store.extras()]);
+    const item = tipo==='cat'? cat.find(c=>c.id===ref) : extras.find(e=>e.id===ref);
+    const comps=await Store.completions();
+    const done=comps.some(x=>x.tipo===tipo&&x.ref===ref&&x.fecha===this.fecha&&x.turno===this.turno);
+    await Store.setCompletion({
+      tipo, ref, area:item.area, fecha:this.fecha, turno:this.turno,
+      colaboradorId:this.user.id, colaboradorNombre:this.user.nombre,
+      nombre:item.nombre
+    }, !done);
+    if(!done && navigator.vibrate) navigator.vibrate(30);
+    this.view_hoy();
+  },
+
+  /* Foto de evidencia */
+  async foto(tipo,ref){
+    const [cat,extras]=await Promise.all([Store.catalogo(),Store.extras()]);
+    const item = tipo==='cat'? cat.find(c=>c.id===ref) : extras.find(e=>e.id===ref);
+    const inp=document.createElement('input');
+    inp.type='file';inp.accept='image/*';inp.capture='environment';
+    inp.onchange=async()=>{
+      const file=inp.files[0]; if(!file) return;
+      toast('Procesando foto…');
+      const {thumb, full} = await procesarImagen(file);
+      const caption = captionFor(item, this.fecha, this.turno, this.user.nombre);
+      // guardar evidencia (miniatura) + marcar completada
+      await Store.addEvidencia({
+        tipo, ref, area:item.area, tarea:item.nombre, seccion:item.seccion||'',
+        fecha:this.fecha, turno:this.turno,
+        colaboradorId:this.user.id, colaboradorNombre:this.user.nombre,
+        img:thumb, caption
+      });
+      await Store.setCompletion({tipo,ref,area:item.area,fecha:this.fecha,turno:this.turno,
+        colaboradorId:this.user.id,colaboradorNombre:this.user.nombre,nombre:item.nombre,evid:true}, true);
+      // compartir a WhatsApp
+      await compartirWhatsApp(full, caption, file.name);
+      this.view_hoy();
+    };
+    inp.click();
+  },
+
+  /* ---------- VISTA: TAREAS (gestión) ---------- */
+  async view_tareas(){
+    const v=$('#view');const mgr=this.user.rol==='encargado';
+    const cat=await Store.catalogo();
+    const areas=SEED.areas;
+    const areaTabs=`<div class="area-scroll" style="margin-bottom:12px">${
+      areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaTareas('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>`;
+    const items=cat.filter(c=>c.area===this.area);
+    const secciones={};items.forEach(c=>{(secciones[c.seccion]=secciones[c.seccion]||[]).push(c);});
+    let html='';
+    for(const s in secciones){
+      html+=`<div class="subhead">${esc(s)}</div>`+secciones[s].map(c=>`
+        <div class="task">
+          <div class="body">
+            <div class="name">${esc(c.nombre)}</div>
+            <div class="meta"><span class="pill fr">🔁 ${FR_LABEL[c.fr]||'—'}</span></div>
+          </div>
+          ${mgr?`<button class="cam" onclick="App.modalEditCat('${c.id}')">✏️</button>`:''}
+        </div>`).join('');
+    }
+    v.innerHTML=`${areaTabs}
+      ${mgr?`<div class="banner demo" style="margin-bottom:10px">✏️ Toca una actividad para editar su frecuencia, o agrega nuevas al checklist.</div>`:''}
+      <div class="card">${html||'<div class="empty">Sin actividades</div>'}</div>
+      ${mgr?`<button class="btn" style="margin-top:14px" onclick="App.modalEditCat()">＋ Nueva actividad fija</button>
+      <button class="btn ghost" style="margin-top:10px" onclick="App.modalNuevaTarea()">＋ Tarea puntual (a un colaborador)</button>`:''}
+      <div style="height:20px"></div>`;
+  },
+  setAreaTareas(a){this.area=a;this.view_tareas();},
+
+  /* ---------- VISTA: EVIDENCIAS ---------- */
+  async view_evidencias(){
+    const v=$('#view');
+    const evs=await Store.evidencias();
+    const mine = this.user.rol==='encargado' ? evs : evs.filter(e=>e.area===this.area || e.colaboradorId===this.user.id);
+    v.innerHTML=`
+      <div class="section-title">Galería de evidencias (${mine.length})</div>
+      ${mine.length? `<div class="gal">${mine.map(e=>`
+        <div class="ev">
+          <img src="${e.img}" alt="" onclick="App.verEvidencia('${e.id}')">
+          <div class="cap"><b>${esc(e.tarea)}</b>${areaName(e.area)} · ${fmtFecha(e.fecha)}<br>${e.turno} · ${esc((e.colaboradorNombre||'').split(' ')[0])}</div>
+        </div>`).join('')}</div>`
+      : '<div class="empty"><div class="big">📷</div>Aún no hay evidencias.<br>Toma una foto al completar una tarea.</div>'}
+      <div style="height:20px"></div>`;
+  },
+  async verEvidencia(id){
+    const evs=await Store.evidencias();const e=evs.find(x=>x.id===id);if(!e)return;
+    const mgr=this.user.rol==='encargado';
+    Modal.open(`
+      <h2>${esc(e.tarea)}</h2>
+      <div class="muted" style="font-size:13px;margin-bottom:10px">${areaName(e.area)} · ${fmtFecha(e.fecha)} · ${e.turno} · ${esc(e.colaboradorNombre||'')}</div>
+      <img src="${e.img}" style="width:100%;border-radius:12px">
+      <div class="row-actions" style="margin-top:12px">
+        <button class="btn gold sm" onclick="App.reenviarWA('${id}')">📲 Reenviar a WhatsApp</button>
+        ${mgr?`<button class="btn danger sm" onclick="App.delEvidencia('${id}')">🗑 Eliminar</button>`:''}
+      </div>`);
+  },
+  async reenviarWA(id){
+    const evs=await Store.evidencias();const e=evs.find(x=>x.id===id);if(!e)return;
+    // reconstruir un File desde la miniatura para compartir
+    const blob=await (await fetch(e.img)).blob();
+    const file=new File([blob],'evidencia.jpg',{type:blob.type});
+    await compartirWhatsApp(file, e.caption, 'evidencia.jpg');
+  },
+  async delEvidencia(id){ await Store.deleteEvidencia(id); Modal.close(); this.view_evidencias(); toast('Evidencia eliminada'); },
+
+  /* ---------- VISTA: REPORTES ---------- */
+  async view_reportes(){
+    const v=$('#view');
+    const d=new Date();const mes=this._repMes??d.getMonth();const anio=this._repAnio??d.getFullYear();
+    const areas=SEED.areas;
+    v.innerHTML=`
+      <div class="card" style="padding:14px">
+        <div class="section-title" style="margin-top:0">Periodo</div>
+        <div style="display:flex;gap:8px">
+          <select id="repMes" style="flex:2">${MESES.map((m,i)=>`<option value="${i}" ${i===mes?'selected':''}>${m}</option>`).join('')}</select>
+          <select id="repAnio" style="flex:1">${[anio-1,anio,anio+1].map(y=>`<option ${y===anio?'selected':''}>${y}</option>`).join('')}</select>
+        </div>
+        <div class="section-title">Área</div>
+        <div class="area-scroll">${areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaRep('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>
+      </div>
+
+      <div class="section-title">Bitácora mensual (imagen UHD)</div>
+      <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:13px;margin-bottom:10px">Genera la cuadrícula del mes (días × actividades, TM/TV) en alta resolución, tal cual tus bitácoras.</div>
+        <button class="btn" onclick="App.genBitacora()">🖼️ Generar imagen de bitácora</button>
+        <button class="btn ghost" style="margin-top:10px" onclick="App.genPDF()">📄 Exportar a PDF</button>
+      </div>
+
+      <div class="section-title">Desempeño por colaborador</div>
+      <div class="card" id="repDesempeno"><div class="empty">Cargando…</div></div>
+
+      <div class="section-title">Evidencias del periodo</div>
+      <div class="card" style="padding:14px"><button class="btn ghost" onclick="App.go('evidencias')">📷 Ver galería de evidencias</button></div>
+      <div style="height:20px"></div>`;
+    $('#repMes').onchange=e=>{this._repMes=+e.target.value;this.view_reportes();};
+    $('#repAnio').onchange=e=>{this._repAnio=+e.target.value;this.view_reportes();};
+    this._renderDesempeno(mes,anio);
+  },
+  setAreaRep(a){this.area=a;this.view_reportes();},
+
+  async _renderDesempeno(mes,anio){
+    const [comps,cols,cat]=await Promise.all([Store.completions(),Store.colaboradores(),Store.catalogo()]);
+    const inMonth=c=>{const [y,m]=c.fecha.split('-');return +y===anio && (+m-1)===mes && c.area===this.area;};
+    const cm=comps.filter(inMonth);
+    // slots esperados en el mes para el área
+    const dim=new Date(anio,mes+1,0).getDate();
+    let esperado=0;
+    cat.filter(c=>c.area===this.area).forEach(c=>{
+      for(let day=1;day<=dim;day++){const iso=`${anio}-${pad(mes+1)}-${pad(day)}`;if(dueOn(c.fr,iso)) esperado+=2;}
+    });
+    const porCol={};
+    cm.forEach(c=>{porCol[c.colaboradorNombre||'—']=(porCol[c.colaboradorNombre||'—']||0)+1;});
+    const filas=Object.entries(porCol).sort((a,b)=>b[1]-a[1]);
+    const totalHechas=cm.length;
+    const pctArea=esperado?Math.round(totalHechas/esperado*100):0;
+    const el=$('#repDesempeno');if(!el)return;
+    el.innerHTML=`
+      <div class="stat"><div><b>Cumplimiento del área</b><div class="muted" style="font-size:12px">${totalHechas} de ~${esperado} casillas del mes</div><div class="bar"><i style="width:${Math.min(pctArea,100)}%"></i></div></div><div class="num">${pctArea}%</div></div>
+      ${filas.length?filas.map(([n,c])=>`<div class="stat"><div>${esc(n)}</div><div class="num">${c}</div></div>`).join(''):'<div class="empty">Sin registros este mes</div>'}`;
+  },
+
+  async genBitacora(){
+    toast('Generando imagen…');
+    const d=new Date();const mes=this._repMes??d.getMonth();const anio=this._repAnio??d.getFullYear();
+    const [comps,cat]=await Promise.all([Store.completions(),Store.catalogo()]);
+    const canvas=dibujarBitacora(this.area,mes,anio,cat,comps);
+    canvas.toBlob(blob=>{
+      const url=URL.createObjectURL(blob);
+      const nombre=`Bitacora_${areaName(this.area)}_${MESES[mes]}_${anio}.png`;
+      Modal.open(`
+        <h2>Bitácora ${areaName(this.area)}</h2>
+        <div class="muted" style="font-size:13px;margin-bottom:10px">${MESES[mes]} ${anio} · ${canvas.width}×${canvas.height}px</div>
+        <img src="${url}" style="width:100%;border:1px solid var(--line);border-radius:10px">
+        <a class="btn" style="margin-top:12px;text-decoration:none" href="${url}" download="${nombre}">⬇️ Descargar imagen UHD</a>
+        <button class="btn gold" style="margin-top:10px" onclick="App.compartirBitacora('${url}','${nombre}')">📲 Compartir</button>`);
+    },'image/png');
+  },
+  async compartirBitacora(url,nombre){
+    const blob=await(await fetch(url)).blob();
+    const file=new File([blob],nombre,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title:nombre});}catch(e){}
+    } else { toast('Usa el botón Descargar y adjúntala en WhatsApp'); }
+  },
+  async genPDF(){
+    toast('Generando PDF…');
+    const d=new Date();const mes=this._repMes??d.getMonth();const anio=this._repAnio??d.getFullYear();
+    const [comps,cat]=await Promise.all([Store.completions(),Store.catalogo()]);
+    const canvas=dibujarBitacora(this.area,mes,anio,cat,comps);
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const {jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:'landscape',unit:'pt',format:'a4'});
+    const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight();
+    const img=canvas.toDataURL('image/png');
+    const ratio=Math.min(pw/canvas.width,ph/canvas.height);
+    const w=canvas.width*ratio,h=canvas.height*ratio;
+    pdf.addImage(img,'PNG',(pw-w)/2,(ph-h)/2,w,h);
+    pdf.save(`Bitacora_${areaName(this.area)}_${MESES[mes]}_${anio}.pdf`);
+  },
+
+  /* ---------- VISTA: EQUIPO ---------- */
+  async view_equipo(){
+    const v=$('#view');const cols=await Store.colaboradores();
+    v.innerHTML=`
+      <div class="section-title">Colaboradores (${cols.length})</div>
+      <div class="card">${cols.map(c=>`
+        <div class="task">
+          <div class="check" style="background:var(--brand);border-color:var(--brand);color:#fff;font-size:13px;font-weight:800">${esc(iniciales(c.nombre))}</div>
+          <div class="body"><div class="name">${esc(c.nombre)}</div>
+          <div class="meta">${c.rol==='encargado'?'👔 Encargado':'👤 Colaborador'}${c.area?' · '+areaName(c.area):''} · PIN ${esc(c.pin)}</div></div>
+          <button class="cam" onclick="App.modalEditUser('${c.id}')">✏️</button>
+        </div>`).join('')}</div>
+      <button class="btn" style="margin-top:14px" onclick="App.modalEditUser()">＋ Agregar colaborador</button>
+      <div style="height:20px"></div>`;
+  },
+
+  /* ---------- MODALES ---------- */
+  async modalNuevaTarea(){
+    const cols=await Store.colaboradores();
+    const opts=cols.filter(c=>c.rol==='colaborador').map(c=>`<option value="${c.id}">${esc(c.nombre)} (${areaName(c.area)})</option>`).join('');
+    Modal.open(`
+      <h2>Tarea puntual</h2>
+      <div class="muted" style="font-size:13px">Se asigna a un colaborador para una fecha.</div>
+      <label class="fld"><span>Descripción</span><input id="ntNombre" placeholder="Ej: Limpiar bodega"></label>
+      <label class="fld"><span>Área</span><select id="ntArea">${SEED.areas.map(a=>`<option value="${a.id}" ${a.id===this.area?'selected':''}>${a.nombre}</option>`).join('')}</select></label>
+      <label class="fld"><span>Asignar a</span><select id="ntUser">${opts||'<option value="">— sin colaboradores —</option>'}</select></label>
+      <label class="fld"><span>Fecha</span><input type="date" id="ntFecha" value="${this.fecha}"></label>
+      <label class="fld"><span>Turno</span><select id="ntTurno"><option value="TM">Mañana</option><option value="TV">Tarde</option></select></label>
+      <button class="btn" onclick="App.saveNuevaTarea()">Asignar tarea</button>`);
+  },
+  async saveNuevaTarea(){
+    const nombre=$('#ntNombre').value.trim();if(!nombre){toast('Escribe la descripción');return;}
+    const uidSel=$('#ntUser').value;const cols=await Store.colaboradores();const u=cols.find(c=>c.id===uidSel);
+    await Store.saveExtra({area:$('#ntArea').value,nombre,asignadoId:uidSel,asignadoNombre:u?u.nombre:'',
+      fecha:$('#ntFecha').value,turno:$('#ntTurno').value,fr:0,creadoPor:this.user.nombre});
+    Modal.close();toast('Tarea asignada');this.go('hoy');
+  },
+  async modalEditCat(id){
+    const cat=await Store.catalogo();const it=id?cat.find(c=>c.id===id):null;
+    const secs=[...new Set(cat.filter(c=>c.area===this.area).map(c=>c.seccion))];
+    Modal.open(`
+      <h2>${it?'Editar actividad':'Nueva actividad'}</h2>
+      <label class="fld"><span>Nombre</span><input id="ecNombre" value="${it?esc(it.nombre):''}" placeholder="Ej: Lavar refrigerador"></label>
+      <label class="fld"><span>Área</span><select id="ecArea">${SEED.areas.map(a=>`<option value="${a.id}" ${(it?it.area:this.area)===a.id?'selected':''}>${a.nombre}</option>`).join('')}</select></label>
+      <label class="fld"><span>Sección</span><input id="ecSec" list="secList" value="${it?esc(it.seccion):''}" placeholder="Ej: Limpiar y desinfectar">
+        <datalist id="secList">${secs.map(s=>`<option value="${esc(s)}">`).join('')}</datalist></label>
+      <label class="fld"><span>Frecuencia</span><select id="ecFr">
+        <option value="1" ${it&&it.fr===1?'selected':''}>Diario</option>
+        <option value="2" ${it&&it.fr===2?'selected':''}>Cada 2 días</option>
+        <option value="3" ${it&&it.fr===3?'selected':''}>Cada 3 días</option>
+        <option value="7" ${it&&it.fr===7?'selected':''}>Domingos</option>
+      </select></label>
+      <button class="btn" onclick="App.saveCat('${id||''}')">Guardar</button>
+      ${it?`<button class="btn danger" style="margin-top:10px" onclick="App.delCat('${id}')">🗑 Eliminar actividad</button>`:''}`);
+  },
+  async saveCat(id){
+    const nombre=$('#ecNombre').value.trim();if(!nombre){toast('Escribe el nombre');return;}
+    await Store.saveCatalogo({id:id||undefined,area:$('#ecArea').value,seccion:$('#ecSec').value.trim()||'General',nombre,fr:+$('#ecFr').value});
+    Modal.close();toast('Guardado');this.view_tareas();
+  },
+  async delCat(id){await Store.deleteCatalogo(id);Modal.close();toast('Eliminada');this.view_tareas();},
+
+  async modalEditUser(id){
+    const cols=await Store.colaboradores();const u=id?cols.find(c=>c.id===id):null;
+    Modal.open(`
+      <h2>${u?'Editar colaborador':'Nuevo colaborador'}</h2>
+      <label class="fld"><span>Nombre</span><input id="euNombre" value="${u?esc(u.nombre):''}"></label>
+      <label class="fld"><span>Rol</span><select id="euRol">
+        <option value="colaborador" ${u&&u.rol==='colaborador'?'selected':''}>Colaborador</option>
+        <option value="encargado" ${u&&u.rol==='encargado'?'selected':''}>Encargado</option></select></label>
+      <label class="fld"><span>Área</span><select id="euArea"><option value="">Todas</option>${SEED.areas.map(a=>`<option value="${a.id}" ${u&&u.area===a.id?'selected':''}>${a.nombre}</option>`).join('')}</select></label>
+      <label class="fld"><span>PIN (4 dígitos)</span><input id="euPin" inputmode="numeric" maxlength="4" value="${u?esc(u.pin):''}" placeholder="0000"></label>
+      <button class="btn" onclick="App.saveUser('${id||''}')">Guardar</button>
+      ${u&&u.id!==this.user.id?`<button class="btn danger" style="margin-top:10px" onclick="App.delUser('${id}')">🗑 Eliminar</button>`:''}`);
+  },
+  async saveUser(id){
+    const nombre=$('#euNombre').value.trim();const pin=$('#euPin').value.trim();
+    if(!nombre){toast('Escribe el nombre');return;}
+    if(!/^\d{4}$/.test(pin)){toast('El PIN debe ser 4 dígitos');return;}
+    await Store.saveColaborador({id:id||undefined,nombre,rol:$('#euRol').value,area:$('#euArea').value||null,pin});
+    Modal.close();toast('Guardado');this.view_equipo();
+  },
+  async delUser(id){await Store.deleteColaborador(id);Modal.close();toast('Eliminado');this.view_equipo();}
+};
+
+/* =====================================================================
+   HELPERS DE RENDER
+   ===================================================================== */
+function iniciales(n){return (n||'?').split(' ').map(p=>p[0]).slice(0,2).join('').toUpperCase();}
+function areaName(id){const a=SEED.areas.find(x=>x.id===id);return a?a.nombre:id;}
+function diaTexto(iso){const d=new Date(iso+'T12:00:00');const dias=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];return `${dias[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;}
+function taskRow(tipo,item,label,done,hasEv){
+  return `<div class="task ${done?'done':''}">
+    <button class="check" onclick="App.toggle('${tipo}','${item.id}')">✓</button>
+    <div class="body">
+      <div class="name">${esc(label)}</div>
+      <div class="meta">${item.fr!==undefined&&item.fr!==0?`<span class="pill fr">🔁 ${FR_LABEL[item.fr]}</span>`:''}${done?'<span class="pill fr" style="background:var(--okbg);color:var(--ok)">✓ Hecho</span>':''}</div>
+    </div>
+    <button class="cam ${hasEv?'has':''}" onclick="App.foto('${tipo}','${item.id}')" title="Foto de evidencia">${hasEv?'✅':'📷'}</button>
+  </div>`;
+}
+function captionFor(item,fecha,turno,quien){
+  return `✅ *${CONFIG.NEGOCIO} · ${areaName(item.area)}*\n${item.nombre}${item.seccion?`\n_${item.seccion}_`:''}\n📅 ${fmtFecha(fecha)} · ${turno==='TM'?'Turno mañana':'Turno tarde'}\n👤 ${quien}`;
+}
+
+/* =====================================================================
+   IMÁGENES: compresión + compartir WhatsApp
+   ===================================================================== */
+function procesarImagen(file){
+  return new Promise(res=>{
+    const img=new Image();const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      // full: reescala a máx 1600px para el envío (UHD razonable, más ligero)
+      const full=escala(img,1600,.9);
+      // thumb: miniatura para galería
+      const thumb=escala(img,640,.72);
+      URL.revokeObjectURL(url);
+      // full como File para compartir
+      fetch(full).then(r=>r.blob()).then(b=>{
+        res({thumb, full:new File([b],'evidencia.jpg',{type:'image/jpeg'})});
+      });
+    };
+    img.src=url;
+  });
+}
+function escala(img,max,q){
+  let {width:w,height:h}=img;
+  if(Math.max(w,h)>max){const r=max/Math.max(w,h);w=Math.round(w*r);h=Math.round(h*r);}
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  c.getContext('2d').drawImage(img,0,0,w,h);
+  return c.toDataURL('image/jpeg',q);
+}
+async function compartirWhatsApp(file,caption,fname){
+  // 1) Web Share con archivo (mejor experiencia: comparte la FOTO)
+  if(navigator.canShare && file && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],text:caption,title:'Evidencia Mozzafiato'}); return; }
+    catch(e){ if(e && e.name==='AbortError') return; }
+  }
+  // 2) Fallback: copiar texto y abrir WhatsApp (el usuario adjunta la foto)
+  try{ await navigator.clipboard.writeText(caption); }catch(e){}
+  toast('Texto copiado. Se abrirá WhatsApp — adjunta la foto.');
+  setTimeout(()=>{ window.open('https://wa.me/?text='+encodeURIComponent(caption),'_blank'); },600);
+}
+function loadScript(src){return new Promise((res,rej)=>{if([...document.scripts].some(s=>s.src===src))return res();const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+
+/* =====================================================================
+   DIBUJAR BITÁCORA MENSUAL (canvas UHD)
+   ===================================================================== */
+function dibujarBitacora(area,mes,anio,cat,comps){
+  const items=cat.filter(c=>c.area===area);
+  const dim=new Date(anio,mes+1,0).getDate();
+  // dimensiones
+  const S=2; // escala UHD
+  const colName=380, colFr=70, dayW=64, rowH=26, headH=64, titleH=90, secH=26;
+  // contar filas (secciones + items)
+  const secciones={};items.forEach(c=>{(secciones[c.seccion]=secciones[c.seccion]||[]).push(c);});
+  let rows=0;for(const s in secciones){rows+=1+secciones[s].length;}
+  const gridW=colName+colFr+dim*dayW;
+  const W=(gridW)*S, H=(titleH+headH+rows*rowH+40)*S;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  const x=cv.getContext('2d');x.scale(S,S);
+  x.fillStyle='#ffffff';x.fillRect(0,0,gridW,H/S);
+  x.textBaseline='middle';
+
+  // título
+  x.fillStyle='#12403f';x.font='bold 30px -apple-system,Arial';
+  x.fillText('Mozzafiato', 20, 34);
+  x.font='bold 20px Arial';x.fillStyle='#1c2622';
+  x.fillText(`Bitácora de limpieza · ${areaName(area)}`, 20, 62);
+  x.font='16px Arial';x.fillStyle='#6b7770';
+  x.textAlign='right';x.fillText(`${MESES[mes]} ${anio}`, gridW-20, 50);x.textAlign='left';
+
+  let y=titleH;
+  // encabezado días
+  x.fillStyle='#12403f';x.fillRect(0,y,gridW,headH);
+  x.fillStyle='#fff';x.font='bold 13px Arial';
+  x.fillText('Actividad', 10, y+headH/2);
+  x.textAlign='center';x.fillText('FR', colName+colFr/2, y+headH/2);
+  for(let dnum=1;dnum<=dim;dnum++){
+    const dx=colName+colFr+(dnum-1)*dayW;
+    x.fillText(dnum, dx+dayW/2, y+16);
+    x.font='9px Arial';x.fillText('TM  TV', dx+dayW/2, y+44);x.font='bold 13px Arial';
+  }
+  x.textAlign='left';
+  y+=headH;
+
+  const isDone=(ref,iso,turno)=>comps.some(c=>c.ref===ref&&c.fecha===iso&&c.turno===turno);
+  const hasEv=(ref,iso,turno)=>comps.some(c=>c.ref===ref&&c.fecha===iso&&c.turno===turno&&c.evid);
+
+  let r=0;
+  for(const s in secciones){
+    // fila de sección
+    x.fillStyle='#e9efee';x.fillRect(0,y,gridW,secH);
+    x.fillStyle='#12403f';x.font='bold 12px Arial';x.fillText(s.toUpperCase(),10,y+secH/2);
+    y+=secH;
+    for(const it of secciones[s]){
+      const zebra=(r%2===0);
+      x.fillStyle=zebra?'#ffffff':'#f7f5f0';x.fillRect(0,y,gridW,rowH);
+      x.fillStyle='#1c2622';x.font='12px Arial';
+      const nm=it.nombre.length>52?it.nombre.slice(0,50)+'…':it.nombre;
+      x.fillText(nm,10,y+rowH/2);
+      x.textAlign='center';x.fillStyle='#6b7770';x.font='bold 11px Arial';
+      x.fillText(String(it.fr),colName+colFr/2,y+rowH/2);
+      // días
+      for(let dnum=1;dnum<=dim;dnum++){
+        const iso=`${anio}-${pad(mes+1)}-${pad(dnum)}`;
+        const due=dueOn(it.fr,iso);
+        const dx=colName+colFr+(dnum-1)*dayW;
+        // celda TM / TV
+        [['TM',0],['TV',dayW/2]].forEach(([t,off])=>{
+          const cx=dx+off;
+          if(!due){x.fillStyle='#eceae4';x.fillRect(cx+1,y+1,dayW/2-2,rowH-2);}
+          else if(isDone(it.id,iso,t)){
+            x.fillStyle=hasEv(it.id,iso,t)?'#1f9d63':'#8fd3ad';
+            x.fillRect(cx+1,y+1,dayW/2-2,rowH-2);
+            x.fillStyle='#fff';x.font='bold 12px Arial';x.fillText('✓',cx+dayW/4,y+rowH/2);
+          }
+        });
+        x.font='bold 11px Arial';
+      }
+      x.textAlign='left';
+      // líneas verticales de las celdas
+      y+=rowH;r++;
+    }
+  }
+  // rejilla
+  x.strokeStyle='#d8d3c7';x.lineWidth=.5;
+  const top=titleH+headH;
+  for(let dnum=0;dnum<=dim;dnum++){const gx=colName+colFr+dnum*dayW;x.beginPath();x.moveTo(gx,titleH);x.lineTo(gx,y);x.stroke();
+    if(dnum<dim){const mid=gx+dayW/2;x.strokeStyle='#ece8df';x.beginPath();x.moveTo(mid,top);x.lineTo(mid,y);x.stroke();x.strokeStyle='#d8d3c7';}}
+  x.beginPath();x.moveTo(colName,titleH);x.lineTo(colName,y);x.stroke();
+  x.beginPath();x.moveTo(colName+colFr,titleH);x.lineTo(colName+colFr,y);x.stroke();
+  // leyenda
+  x.font='11px Arial';x.fillStyle='#6b7770';
+  x.fillText('✓ verde fuerte = con foto de evidencia · ✓ verde claro = completada · gris = no programado ese día', 10, y+18);
+  return cv;
+}
+
+/* =====================================================================
+   MODAL
+   ===================================================================== */
+const Modal={
+  open(html){
+    $('#modalRoot').innerHTML=`<div class="modal-bg" onclick="if(event.target===this)Modal.close()">
+      <div class="modal"><div class="grab"></div>${html}</div></div>`;
+  },
+  close(){$('#modalRoot').innerHTML='';}
+};
+
+/* Arranque */
+App.start();
+</script>
+</body>
+</html>
