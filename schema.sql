@@ -112,3 +112,17 @@ alter table grupos enable row level security;
 drop policy if exists p_all on grupos;
 create policy p_all on grupos for all using (true) with check (true);
 alter publication supabase_realtime add table grupos;
+
+-- =====================================================================
+-- Gestión semanal: recurrencia + plantillas (roles)
+-- =====================================================================
+alter table extras add column if not exists dias jsonb not null default '[]';
+create table if not exists plantillas (
+  id text primary key,
+  nombre text not null,
+  mapa jsonb not null default '{}'
+);
+alter table plantillas enable row level security;
+drop policy if exists p_all on plantillas;
+create policy p_all on plantillas for all using (true) with check (true);
+alter publication supabase_realtime add table plantillas;

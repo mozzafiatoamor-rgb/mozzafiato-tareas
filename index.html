@@ -259,6 +259,15 @@ function dueOn(fr,iso){
   if(fr===7) return d.getDay()===0;
   return ((d.getDate()-1)%fr)===0;
 }
+// --- Semana ---
+const DIAS_CORTO=['D','L','M','M','J','V','S'];        // getDay 0..6
+const DIAS_NOM=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const DIAS_ORDEN=[1,2,3,4,5,6,0];                       // Lun..Dom
+function isoOf(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+function addDays(iso,n){const d=new Date(iso+'T12:00:00');d.setDate(d.getDate()+n);return isoOf(d);}
+function lunesDe(iso){const d=new Date(iso+'T12:00:00');const off=(d.getDay()+6)%7;d.setDate(d.getDate()-off);return isoOf(d);}
+function semanaDe(iso){const lun=lunesDe(iso);return Array.from({length:7},(_,i)=>addDays(lun,i));} // Lun..Dom
+function extraDueOn(e,iso){ if(e.dias&&e.dias.length){return e.dias.includes(new Date(iso+'T12:00:00').getDay());} return e.fecha===iso; }
 
 /* =====================================================================
    CAPA DE DATOS  (misma interfaz para DEMO y NUBE)
@@ -283,11 +292,13 @@ const Store = {
           extras: [],
           completions: [],
           evidencias: [],
-          grupos: []
+          grupos: [],
+          plantillas: []
         };
         this._save();
       }
       if(!this._d.grupos) this._d.grupos=[];
+      if(!this._d.plantillas) this._d.plantillas=[];
     }
   },
   _save(){ if(!CLOUD) LSset(LS, JSON.stringify(this._d)); },
@@ -399,6 +410,23 @@ const Store = {
   async deleteGrupo(id){
     if(CLOUD){await this.sb.from('grupos').delete().eq('id',id);return;}
     this._d.grupos=this._d.grupos.filter(x=>x.id!==id);this._save();
+  },
+
+  /* ---- Plantillas de asignación (roles) ---- */
+  async plantillas(){
+    if(CLOUD){const {data}=await this.sb.from('plantillas').select('*').order('nombre');return this._rows(data).map(p=>({...p, mapa:p.mapa||{}}));}
+    return this._d.plantillas;
+  },
+  async savePlantilla(p){
+    if(!p.id) p.id=uid();
+    if(CLOUD){await this.sb.from('plantillas').upsert(this._toDB(p));return p;}
+    const i=this._d.plantillas.findIndex(x=>x.id===p.id);
+    if(i<0) this._d.plantillas.push(p); else this._d.plantillas[i]=p;
+    this._save();return p;
+  },
+  async deletePlantilla(id){
+    if(CLOUD){await this.sb.from('plantillas').delete().eq('id',id);return;}
+    this._d.plantillas=this._d.plantillas.filter(x=>x.id!==id);this._save();
   }
 };
 
@@ -510,7 +538,7 @@ const App = {
     if(soloMias){
       dueCat = dueCat.filter(c=> asign[c.id] && asign[c.id].colaboradorId===this.user.id && turnoMatch(asign[c.id].turno,this.turno));
     }
-    let todayExtras = extras.filter(e=>e.area===this.area && e.fecha===this.fecha && (!soloMias || (e.asignadoId===this.user.id && e.turno===this.turno)));
+    let todayExtras = extras.filter(e=>e.area===this.area && extraDueOn(e,this.fecha) && (!soloMias || (e.asignadoId===this.user.id && e.turno===this.turno)));
 
     const secciones={};
     dueCat.forEach(c=>{(secciones[c.seccion]=secciones[c.seccion]||[]).push(c);});
@@ -607,7 +635,7 @@ const App = {
   /* ---------- VISTA: TAREAS (gestión) ---------- */
   async view_tareas(){
     const v=$('#view');const mgr=this.user.rol==='encargado';
-    const [cat,grupos]=await Promise.all([Store.catalogo(),Store.grupos()]);
+    const [cat,grupos,extras,plantillas]=await Promise.all([Store.catalogo(),Store.grupos(),Store.extras(),Store.plantillas()]);
     const areas=SEED.areas;
     const areaTabs=`<div class="area-scroll" style="margin-bottom:12px">${
       areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaTareas('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>`;
@@ -626,6 +654,24 @@ const App = {
         </div>
         <button class="cam" onclick="App.modalEditGrupo('${g.id}')">✏️</button>
       </div>`).join('') : '<div class="empty" style="padding:22px">Aún no hay grupos. Crea uno para repartir actividades entre tu equipo.</div>';
+
+    // --- Plantillas (roles) ---
+    const plHTML = plantillas.length ? plantillas.map(p=>`
+      <div class="task">
+        <div class="body"><div class="name">${esc(p.nombre)}</div>
+          <div class="meta"><span class="pill fr">${Object.keys(p.mapa||{}).length} grupos</span></div></div>
+        <button class="btn sm" onclick="App.aplicarPlantilla('${p.id}')">Aplicar</button>
+        <button class="cam" style="margin-left:6px" onclick="App.delPlantilla('${p.id}')">🗑</button>
+      </div>`).join('') : '<div class="empty" style="padding:18px">Sin plantillas. Guarda un reparto de grupos para reusarlo.</div>';
+
+    // --- Tareas programadas del área (recurrentes + puntuales) ---
+    const prog=extras.filter(e=>e.area===this.area).sort((a,b)=>((b.dias&&b.dias.length)?1:0)-((a.dias&&a.dias.length)?1:0));
+    const progHTML = prog.length ? prog.map(e=>{
+      const cuando=(e.dias&&e.dias.length)? '🔁 '+DIAS_ORDEN.filter(d=>e.dias.includes(d)).map(d=>DIAS_NOM[d].slice(0,3)).join(', ') : '📅 '+fmtFecha(e.fecha);
+      return `<div class="task"><div class="body"><div class="name">${esc(e.nombre)}</div>
+        <div class="meta"><span class="pill fr">${cuando}</span>${e.asignadoNombre?`<span class="pill" style="background:#eef4f3;color:var(--brand2)">👤 ${esc(e.asignadoNombre.split(' ')[0])}</span>`:''}<span class="pill fr">${e.turno==='TM'?'Mañana':'Tarde'}</span></div></div>
+        <button class="cam" onclick="App.delExtra('${e.id}')">🗑</button></div>`;
+    }).join('') : '<div class="empty" style="padding:18px">Sin tareas programadas.</div>';
 
     // --- Catálogo del área ---
     const items=cat.filter(c=>c.area===this.area);
@@ -647,13 +693,60 @@ const App = {
       <div class="card">${gruposHTML}</div>
       <button class="btn" style="margin-top:12px" onclick="App.modalEditGrupo()">＋ Nuevo grupo de trabajo</button>
 
+      <div class="section-title">Plantillas (roles)</div>
+      <div class="banner" style="margin-bottom:10px">🗂️ Guarda un reparto de grupos por persona y aplícalo cuando quieras (para rotar al equipo).</div>
+      <div class="card">${plHTML}</div>
+      <button class="btn ghost" style="margin-top:10px" onclick="App.modalGuardarPlantilla()">💾 Guardar reparto actual como plantilla</button>
+
+      <div class="section-title">Tareas programadas · ${areaName(this.area)}</div>
+      <button class="btn" style="margin-bottom:10px" onclick="App.modalNuevaTarea()">＋ Nueva tarea (puntual o recurrente)</button>
+      <button class="btn ghost" style="margin-bottom:12px" onclick="App.duplicarSemana()">🔁 Duplicar puntuales de esta semana a la próxima</button>
+      <div class="card">${progHTML}</div>
+
       <div class="section-title">Checklist fijo · ${areaName(this.area)}</div>
+      ${mgr?`<button class="btn" style="margin-bottom:10px" onclick="App.modalEditCat()">＋ Nueva actividad fija</button>`:''}
       <div class="card">${html||'<div class="empty">Sin actividades</div>'}</div>
-      ${mgr?`<button class="btn ghost" style="margin-top:12px" onclick="App.modalEditCat()">＋ Nueva actividad fija</button>
-      <button class="btn ghost" style="margin-top:10px" onclick="App.modalNuevaTarea()">＋ Tarea puntual (a un colaborador)</button>`:''}
       <div style="height:20px"></div>`;
   },
   setAreaTareas(a){this.area=a;this.view_tareas();},
+  async delExtra(id){ await Store.deleteExtra(id); toast('Tarea eliminada'); this.view_tareas(); },
+
+  async duplicarSemana(){
+    const extras=await Store.extras();
+    const setW=new Set(semanaDe(this.fecha));
+    const oneoff=extras.filter(e=>!(e.dias&&e.dias.length) && setW.has(e.fecha));
+    if(!oneoff.length){ toast('No hay tareas puntuales esta semana'); return; }
+    for(const e of oneoff){ const {id, ...rest}=e; await Store.saveExtra({...rest, fecha:addDays(e.fecha,7)}); }
+    toast(`${oneoff.length} tarea(s) copiadas a la próxima semana`); this.view_tareas();
+  },
+
+  /* Plantillas (roles) */
+  modalGuardarPlantilla(){
+    Modal.open(`
+      <h2>Guardar plantilla (rol)</h2>
+      <div class="muted" style="font-size:13px">Guarda el reparto actual de TODOS los grupos (quién tiene cada grupo) con un nombre, para volver a aplicarlo luego.</div>
+      <label class="fld"><span>Nombre</span><input id="plNombre" placeholder="Ej: Rol semana A"></label>
+      <button class="btn" onclick="App.savePlantillaNueva()">Guardar</button>`);
+  },
+  async savePlantillaNueva(){
+    const nombre=$('#plNombre').value.trim(); if(!nombre){toast('Ponle nombre');return;}
+    const grupos=await Store.grupos();
+    const mapa={}; grupos.forEach(g=>{ mapa[g.id]={colaboradorId:g.colaboradorId||null, colaboradorNombre:g.colaboradorNombre||''}; });
+    await Store.savePlantilla({nombre, mapa});
+    Modal.close(); toast('Plantilla guardada'); this.view_tareas();
+  },
+  async aplicarPlantilla(id){
+    const [plantillas,grupos]=await Promise.all([Store.plantillas(),Store.grupos()]);
+    const p=plantillas.find(x=>x.id===id); if(!p) return;
+    let n=0;
+    for(const gid in (p.mapa||{})){
+      const g=grupos.find(x=>x.id===gid); if(!g) continue;
+      const a=p.mapa[gid];
+      await Store.saveGrupo({...g, colaboradorId:a.colaboradorId, colaboradorNombre:a.colaboradorNombre}); n++;
+    }
+    toast(`Plantilla aplicada (${n} grupos)`); this.view_tareas();
+  },
+  async delPlantilla(id){ await Store.deletePlantilla(id); toast('Plantilla eliminada'); this.view_tareas(); },
 
   /* ---------- VISTA: EVIDENCIAS ---------- */
   async view_evidencias(){
@@ -787,7 +880,17 @@ const App = {
   },
 
   /* ---------- VISTA: SUPERVISIÓN (en vivo) ---------- */
+  setSupMode(m){this.supMode=m;this.view_supervision();},
+  setSupEnfoque(e){this.supEnfoque=e;this.view_supervision();},
+  semanaNav(n){this.semanaRef=addDays(this.semanaRef||this.fecha,n*7);this.view_supervision();},
   async view_supervision(){
+    this.supMode=this.supMode||'hoy';
+    const toggle=`<div class="turno-toggle" style="margin-bottom:12px">
+      <button class="${this.supMode==='hoy'?'active':''}" style="${this.supMode==='hoy'?'background:var(--brand);color:#fff':''}" onclick="App.setSupMode('hoy')">📍 Hoy</button>
+      <button class="${this.supMode==='semana'?'active':''}" style="${this.supMode==='semana'?'background:var(--brand);color:#fff':''}" onclick="App.setSupMode('semana')">🗓️ Semana</button>
+    </div>`;
+    if(this.supMode==='semana') return this._viewSemana(toggle);
+
     const v=$('#view'); const today=this.fecha;
     const [cat,comps,grupos,extras,cols]=await Promise.all([Store.catalogo(),Store.completions(),Store.grupos(),Store.extras(),Store.colaboradores()]);
     const nowT=turnoActual();
@@ -795,12 +898,11 @@ const App = {
     const isDone=(tipo,ref,turno)=>doneSet.has(`${tipo}:${ref}:${turno}`);
     const overdue=(turno,done)=> !done && turno==='TM' && nowT==='TV';
 
-    // Resumen por área (ambos turnos del día)
     const areasHTML=SEED.areas.map(a=>{
       const due=cat.filter(c=>c.area===a.id && dueOn(c.fr,today));
       let total=0,done=0,late=0;
       due.forEach(c=>['TM','TV'].forEach(t=>{total++;const d=isDone('cat',c.id,t);if(d)done++;else if(overdue(t,d))late++;}));
-      extras.filter(e=>e.area===a.id&&e.fecha===today).forEach(e=>{total++;const d=isDone('extra',e.id,e.turno);if(d)done++;else if(overdue(e.turno,d))late++;});
+      extras.filter(e=>e.area===a.id&&extraDueOn(e,today)).forEach(e=>{total++;const d=isDone('extra',e.id,e.turno);if(d)done++;else if(overdue(e.turno,d))late++;});
       const pct=total?Math.round(done/total*100):0;
       return `<div class="card" style="padding:14px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center"><b>${a.emoji} ${a.nombre}</b><span class="num">${done}/${total}</span></div>
@@ -809,7 +911,6 @@ const App = {
       </div>`;
     }).join('');
 
-    // Resumen por colaborador
     const colabs=cols.filter(c=>c.rol==='colaborador');
     const asignByCol={};
     grupos.forEach(g=>{(g.items||[]).forEach(cid=>{ (asignByCol[g.colaboradorId]=asignByCol[g.colaboradorId]||[]).push({cid,turno:g.turno}); });});
@@ -820,7 +921,7 @@ const App = {
         const c=catById[cid]; if(!c||!dueOn(c.fr,today))return;
         (turno==='ambos'?['TM','TV']:[turno]).forEach(t=>{total++;const d=isDone('cat',cid,t);if(d)done++;else if(overdue(t,d))late++;});
       });
-      extras.filter(e=>e.asignadoId===col.id&&e.fecha===today).forEach(e=>{total++;const d=isDone('extra',e.id,e.turno);if(d)done++;else if(overdue(e.turno,d))late++;});
+      extras.filter(e=>e.asignadoId===col.id&&extraDueOn(e,today)).forEach(e=>{total++;const d=isDone('extra',e.id,e.turno);if(d)done++;else if(overdue(e.turno,d))late++;});
       const pct=total?Math.round(done/total*100):0;
       return `<div class="stat">
         <div style="flex:1">
@@ -832,12 +933,73 @@ const App = {
       </div>`;
     }).join('');
 
-    v.innerHTML=`
+    v.innerHTML=`${toggle}
       <div class="section-title" style="margin-top:6px">Hoy por área · ${diaTexto(today)}</div>
       ${areasHTML}
       <div class="section-title">Por colaborador</div>
       <div class="card">${colHTML||'<div class="empty">Sin colaboradores</div>'}</div>
       <div class="muted" style="font-size:11.5px;text-align:center;margin-top:12px">📡 Se actualiza solo en tiempo real</div>
+      <div style="height:20px"></div>`;
+  },
+
+  async _viewSemana(toggle){
+    const v=$('#view');
+    this.supEnfoque=this.supEnfoque||'area';
+    this.semanaRef=this.semanaRef||this.fecha;
+    const dias=semanaDe(this.semanaRef);
+    const [cat,comps,grupos,extras,cols]=await Promise.all([Store.catalogo(),Store.completions(),Store.grupos(),Store.extras(),Store.colaboradores()]);
+    const doneSet=new Set(comps.map(c=>`${c.tipo}:${c.ref}:${c.fecha}:${c.turno}`));
+    const isDone=(tipo,ref,iso,turno)=>doneSet.has(`${tipo}:${ref}:${iso}:${turno}`);
+    const catById={};cat.forEach(c=>catById[c.id]=c);
+    const asignByCol={};grupos.forEach(g=>(g.items||[]).forEach(cid=>{(asignByCol[g.colaboradorId]=asignByCol[g.colaboradorId]||[]).push({cid,turno:g.turno});}));
+
+    const areaDia=(area,iso)=>{let total=0,done=0;
+      cat.filter(c=>c.area===area&&dueOn(c.fr,iso)).forEach(c=>['TM','TV'].forEach(t=>{total++;if(isDone('cat',c.id,iso,t))done++;}));
+      extras.filter(e=>e.area===area&&extraDueOn(e,iso)).forEach(e=>{total++;if(isDone('extra',e.id,iso,e.turno))done++;});
+      return {total,done};};
+    const colDia=(col,iso)=>{let total=0,done=0;
+      (asignByCol[col.id]||[]).forEach(({cid,turno})=>{const c=catById[cid];if(!c||!dueOn(c.fr,iso))return;(turno==='ambos'?['TM','TV']:[turno]).forEach(t=>{total++;if(isDone('cat',cid,iso,t))done++;});});
+      extras.filter(e=>e.asignadoId===col.id&&extraDueOn(e,iso)).forEach(e=>{total++;if(isDone('extra',e.id,iso,e.turno))done++;});
+      return {total,done};};
+
+    const cell=(iso,r)=>{const pct=r.total?Math.round(r.done/r.total*100):0;const hoy=iso===this.fecha;
+      const bg=r.total===0?'var(--line)':pct===100?'var(--ok)':pct>0?'#8fd3ad':'var(--warnbg)';
+      const col=pct>0?'#0a3a22':(r.total?'var(--warn)':'var(--muted)');const d=new Date(iso+'T12:00:00');
+      return `<div style="flex:1;text-align:center">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:2px">${DIAS_CORTO[d.getDay()]}</div>
+        <div style="height:36px;border-radius:8px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;color:${col};${hoy?'outline:2px solid var(--brand);outline-offset:-2px':''}">${r.total?r.done+'/'+r.total:'–'}</div>
+      </div>`;};
+
+    const enfoqueToggle=`<div class="turno-toggle" style="margin-bottom:12px">
+      <button class="${this.supEnfoque==='area'?'active':''}" style="${this.supEnfoque==='area'?'background:var(--brand);color:#fff':''}" onclick="App.setSupEnfoque('area')">🧩 Por área</button>
+      <button class="${this.supEnfoque==='persona'?'active':''}" style="${this.supEnfoque==='persona'?'background:var(--brand);color:#fff':''}" onclick="App.setSupEnfoque('persona')">🙋 Por persona</button>
+    </div>`;
+    const d0=new Date(dias[0]+'T12:00:00'), d6=new Date(dias[6]+'T12:00:00');
+    const rango=`${d0.getDate()} ${MESES[d0.getMonth()].slice(0,3)} – ${d6.getDate()} ${MESES[d6.getMonth()].slice(0,3)}`;
+    const nav=`<div class="card" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;margin-bottom:12px">
+      <button class="btn sm ghost" onclick="App.semanaNav(-1)">‹</button><b style="font-size:14px">Semana ${rango}</b><button class="btn sm ghost" onclick="App.semanaNav(1)">›</button></div>`;
+
+    let body='';
+    if(this.supEnfoque==='area'){
+      body=SEED.areas.map(a=>{let wt=0,wd=0;const cells=dias.map(iso=>{const r=areaDia(a.id,iso);wt+=r.total;wd+=r.done;return cell(iso,r);}).join('');
+        const pct=wt?Math.round(wd/wt*100):0;
+        return `<div class="card" style="padding:12px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>${a.emoji} ${a.nombre}</b><span class="num">${pct}%</span></div>
+          <div style="display:flex;gap:4px">${cells}</div>
+          <div class="muted" style="font-size:11px;margin-top:6px">${wd}/${wt} en la semana</div></div>`;
+      }).join('');
+    } else {
+      const colabs=cols.filter(c=>c.rol==='colaborador');
+      body=colabs.map(col=>{let wt=0,wd=0;const cells=dias.map(iso=>{const r=colDia(col,iso);wt+=r.total;wd+=r.done;return cell(iso,r);}).join('');
+        const pct=wt?Math.round(wd/wt*100):0;
+        return `<div class="card" style="padding:12px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>${esc(col.nombre)}</b><span class="num">${wt?pct+'%':'—'}</span></div>
+          <div style="display:flex;gap:4px">${cells}</div>
+          <div class="muted" style="font-size:11px;margin-top:6px">${wt?wd+'/'+wt+' en la semana':'sin tareas asignadas'}</div></div>`;
+      }).join('')||'<div class="empty">Sin colaboradores</div>';
+    }
+    v.innerHTML=`${toggle}${nav}${enfoqueToggle}${body}
+      <div class="muted" style="font-size:11px;text-align:center;margin-top:8px">Cada cuadro = hechas/total de ese día · verde = completo · rojo = pendiente</div>
       <div style="height:20px"></div>`;
   },
 
@@ -902,21 +1064,33 @@ const App = {
     const cols=await Store.colaboradores();
     const opts=cols.filter(c=>c.rol==='colaborador').map(c=>`<option value="${c.id}">${esc(c.nombre)} (${areaName(c.area)})</option>`).join('');
     Modal.open(`
-      <h2>Tarea puntual</h2>
-      <div class="muted" style="font-size:13px">Se asigna a un colaborador para una fecha.</div>
-      <label class="fld"><span>Descripción</span><input id="ntNombre" placeholder="Ej: Limpiar bodega"></label>
+      <h2>Tarea puntual o recurrente</h2>
+      <div class="muted" style="font-size:13px">Asígnala a un colaborador para un día, o repítela ciertos días de la semana.</div>
+      <label class="fld"><span>Descripción</span><input id="ntNombre" placeholder="Ej: Recibir pedido"></label>
       <label class="fld"><span>Área</span><select id="ntArea">${SEED.areas.map(a=>`<option value="${a.id}" ${a.id===this.area?'selected':''}>${a.nombre}</option>`).join('')}</select></label>
       <label class="fld"><span>Asignar a</span><select id="ntUser">${opts||'<option value="">— sin colaboradores —</option>'}</select></label>
-      <label class="fld"><span>Fecha</span><input type="date" id="ntFecha" value="${this.fecha}"></label>
       <label class="fld"><span>Turno</span><select id="ntTurno"><option value="TM">Mañana</option><option value="TV">Tarde</option></select></label>
-      <button class="btn" onclick="App.saveNuevaTarea()">Asignar tarea</button>`);
+      <label class="fld"><span>¿Cuándo?</span><select id="ntCuando" onchange="App._toggleCuando()">
+        <option value="dia">Un solo día</option>
+        <option value="semana">Repetir días de la semana</option>
+      </select></label>
+      <div id="ntDiaBox"><label class="fld"><span>Fecha</span><input type="date" id="ntFecha" value="${this.fecha}"></label></div>
+      <div id="ntSemBox" class="hidden">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);margin:4px 0 6px">Se repite cada:</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${DIAS_ORDEN.map(d=>`<label class="area-tab" style="cursor:pointer;display:inline-flex;gap:6px;align-items:center;padding:8px 12px"><input type="checkbox" class="ntDia" value="${d}">${DIAS_NOM[d].slice(0,3)}</label>`).join('')}</div>
+      </div>
+      <button class="btn" style="margin-top:14px" onclick="App.saveNuevaTarea()">Guardar tarea</button>`);
   },
+  _toggleCuando(){const v=$('#ntCuando').value;$('#ntDiaBox').classList.toggle('hidden',v!=='dia');$('#ntSemBox').classList.toggle('hidden',v!=='semana');},
   async saveNuevaTarea(){
     const nombre=$('#ntNombre').value.trim();if(!nombre){toast('Escribe la descripción');return;}
     const uidSel=$('#ntUser').value;const cols=await Store.colaboradores();const u=cols.find(c=>c.id===uidSel);
+    let dias=[], fecha=this.fecha;
+    if($('#ntCuando').value==='semana'){ dias=$$('.ntDia:checked').map(i=>+i.value); if(!dias.length){toast('Elige al menos un día');return;} }
+    else { fecha=$('#ntFecha').value; }
     await Store.saveExtra({area:$('#ntArea').value,nombre,asignadoId:uidSel,asignadoNombre:u?u.nombre:'',
-      fecha:$('#ntFecha').value,turno:$('#ntTurno').value,fr:0,creadoPor:this.user.nombre});
-    Modal.close();toast('Tarea asignada');this.go('hoy');
+      fecha,turno:$('#ntTurno').value,fr:0,dias,creadoPor:this.user.nombre});
+    Modal.close();toast(dias.length?'Tarea recurrente guardada':'Tarea asignada');this.refresh();
   },
   async modalEditCat(id){
     const cat=await Store.catalogo();const it=id?cat.find(c=>c.id===id):null;
