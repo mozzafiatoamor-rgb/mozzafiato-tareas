@@ -113,10 +113,11 @@ nav.tabbar{
   border-top:1px solid var(--line);display:flex;
   padding:6px 6px calc(6px + env(safe-area-inset-bottom));
 }
-nav.tabbar button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 1px;color:var(--muted);font-size:9.5px;font-weight:600;border-radius:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+nav.tabbar button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;color:var(--muted);font-size:8.5px;font-weight:600;border-radius:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+nav.tabbar button>span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 nav.tabbar button.active{color:var(--brand)}
 nav.tabbar button.active .ic{transform:translateY(-1px)}
-nav.tabbar .ic{font-size:20px;line-height:1}
+nav.tabbar .ic{font-size:18px;line-height:1}
 
 /* Inputs */
 label.fld{display:block;margin:12px 0}
@@ -220,9 +221,10 @@ textarea{min-height:70px;resize:vertical}
 
   <nav class="tabbar" id="tabbar">
     <button data-tab="hoy" class="active"><span class="ic">✅</span>Hoy</button>
-    <button data-tab="supervision"><span class="ic">📡</span>Supervisión</button>
+    <button data-tab="supervision"><span class="ic">📡</span>Superv.</button>
     <button data-tab="tareas"><span class="ic">📋</span>Tareas</button>
-    <button data-tab="evidencias"><span class="ic">📷</span>Evidencias</button>
+    <button data-tab="inventario"><span class="ic">📦</span>Inventario</button>
+    <button data-tab="evidencias"><span class="ic">📷</span>Evidenc.</button>
     <button data-tab="reportes"><span class="ic">📊</span>Reportes</button>
     <button data-tab="equipo"><span class="ic">👥</span>Equipo</button>
   </nav>
@@ -280,6 +282,9 @@ function addDays(iso,n){const d=new Date(iso+'T12:00:00');d.setDate(d.getDate()+
 function lunesDe(iso){const d=new Date(iso+'T12:00:00');const off=(d.getDay()+6)%7;d.setDate(d.getDate()-off);return isoOf(d);}
 function semanaDe(iso){const lun=lunesDe(iso);return Array.from({length:7},(_,i)=>addDays(lun,i));} // Lun..Dom
 function extraDueOn(e,iso){ if(e.dias&&e.dias.length){return e.dias.includes(new Date(iso+'T12:00:00').getDay());} return e.fecha===iso; }
+// --- Inventario ---
+const INV_FR={turno:'Cada turno', diario:'Diario', semanal:'Semanal'};
+function invDue(fr,turno,iso){ if(fr==='diario') return turno==='TM'; if(fr==='semanal') return turno==='TM'&&new Date(iso+'T12:00:00').getDay()===0; return true; /* 'turno' */ }
 
 /* =====================================================================
    CAPA DE DATOS  (misma interfaz para DEMO y NUBE)
@@ -305,12 +310,18 @@ const Store = {
           completions: [],
           evidencias: [],
           grupos: [],
-          plantillas: []
+          plantillas: [],
+          inventario: [],
+          conteos: [],
+          roturas: []
         };
         this._save();
       }
       if(!this._d.grupos) this._d.grupos=[];
       if(!this._d.plantillas) this._d.plantillas=[];
+      if(!this._d.inventario) this._d.inventario=[];
+      if(!this._d.conteos) this._d.conteos=[];
+      if(!this._d.roturas) this._d.roturas=[];
     }
   },
   _save(){ if(!CLOUD) LSset(LS, JSON.stringify(this._d)); },
@@ -439,6 +450,51 @@ const Store = {
   async deletePlantilla(id){
     if(CLOUD){await this.sb.from('plantillas').delete().eq('id',id);return;}
     this._d.plantillas=this._d.plantillas.filter(x=>x.id!==id);this._save();
+  },
+
+  /* ---- Inventario: artículos contables ---- */
+  async inventario(){
+    if(CLOUD){const {data}=await this.sb.from('inventario').select('*').order('nombre');return this._rows(data);}
+    return this._d.inventario;
+  },
+  async saveInventario(a){
+    if(!a.id) a.id=uid();
+    if(CLOUD){await this.sb.from('inventario').upsert(this._toDB(a));return a;}
+    const i=this._d.inventario.findIndex(x=>x.id===a.id);
+    if(i<0) this._d.inventario.push(a); else this._d.inventario[i]=a;
+    this._save();return a;
+  },
+  async deleteInventario(id){
+    if(CLOUD){await this.sb.from('inventario').delete().eq('id',id);return;}
+    this._d.inventario=this._d.inventario.filter(x=>x.id!==id);this._save();
+  },
+
+  /* ---- Conteos (recepción/entrega) ---- */
+  async conteos(){
+    if(CLOUD){const {data}=await this.sb.from('conteos').select('*');return this._rows(data);}
+    return this._d.conteos;
+  },
+  async saveConteos(rows){ // rows: array de {key, area, fecha, turno, tipo, articuloId, articuloNombre, cantidad, encargadoId, encargadoNombre, ts}
+    if(CLOUD){ await this.sb.from('conteos').upsert(rows.map(r=>this._toDB(r)),{onConflict:'key'}); return; }
+    rows.forEach(r=>{ const i=this._d.conteos.findIndex(x=>x.key===r.key); if(i<0) this._d.conteos.push(r); else this._d.conteos[i]=r; });
+    this._save();
+  },
+
+  /* ---- Roturas / pérdidas ---- */
+  async roturas(){
+    if(CLOUD){const {data}=await this.sb.from('roturas').select('*').order('ts',{ascending:false});return this._rows(data);}
+    return [...this._d.roturas].sort((a,b)=>b.ts-a.ts);
+  },
+  async saveRotura(r){
+    if(!r.id) r.id=uid(); if(!r.ts) r.ts=Date.now();
+    if(CLOUD){await this.sb.from('roturas').insert(this._toDB(r));return r;}
+    this._d.roturas.push(r);
+    if(this._d.roturas.length>200) this._d.roturas=this._d.roturas.slice(-200);
+    this._save();return r;
+  },
+  async deleteRotura(id){
+    if(CLOUD){await this.sb.from('roturas').delete().eq('id',id);return;}
+    this._d.roturas=this._d.roturas.filter(x=>x.id!==id);this._save();
   }
 };
 
@@ -463,7 +519,7 @@ const Outbox = {
    ===================================================================== */
 const App = {
   user:null, tab:'hoy', area:'barra', turno:turnoActual(), fecha:hoyISO(),
-  hoyFilter:null, _openSecs:new Set(), _pin:'', _who:null, _cache:{},
+  hoyFilter:null, _openSecs:new Set(), invMode:'conteo', invTipo:'recepcion', _artFoto:'', _rotFile:null, _pin:'', _who:null, _cache:{},
 
   async start(){
     await Store.init();
@@ -518,7 +574,7 @@ const App = {
     if(this.user.rol==='colaborador' && this.user.area) this.area=this.user.area;
     // ocultar pestañas de gestión a colaboradores
     const mgr=this.user.rol==='encargado';
-    const soloEncargado=['supervision','tareas','equipo'];
+    const soloEncargado=['supervision','tareas','inventario','equipo'];
     $$('#tabbar button').forEach(b=>{
       if(soloEncargado.includes(b.dataset.tab)) b.classList.toggle('hidden',!mgr);
     });
@@ -528,7 +584,7 @@ const App = {
   go(tab){
     this.tab=tab;
     $$('#tabbar button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-    $('#topSub').textContent={hoy:'Tareas de hoy',supervision:'Supervisión en vivo',tareas:'Tareas y grupos',evidencias:'Evidencias',reportes:'Reportes',equipo:'Equipo'}[tab];
+    $('#topSub').textContent={hoy:'Tareas de hoy',supervision:'Supervisión en vivo',tareas:'Tareas y grupos',inventario:'Inventario y conteos',evidencias:'Evidencias',reportes:'Reportes',equipo:'Equipo'}[tab];
     this['view_'+tab]();
   },
 
@@ -1122,6 +1178,200 @@ const App = {
   },
   async delGrupo(id){ await Store.deleteGrupo(id); Modal.close(); toast('Grupo eliminado'); this.view_tareas(); },
 
+  /* ---------- VISTA: INVENTARIO ---------- */
+  async view_inventario(){
+    const v=$('#view');
+    this.invMode=this.invMode||'conteo';
+    const areaTabs=`<div class="area-scroll" style="margin-bottom:12px">${SEED.areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaInv('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>`;
+    const modeToggle=`<div class="turno-toggle" style="margin-bottom:12px">${
+      [['conteo','🔄 Conteo'],['incidentes','⚠️ Incidentes'],['catalogo','📦 Catálogo']].map(([m,l])=>`<button class="${this.invMode===m?'active':''}" style="${this.invMode===m?'background:var(--brand);color:#fff':''}" onclick="App.setInvMode('${m}')">${l}</button>`).join('')
+    }</div>`;
+    let body='';
+    if(this.invMode==='conteo') body=await this._invConteo();
+    else if(this.invMode==='incidentes') body=await this._invIncidentes();
+    else body=await this._invCatalogo();
+    v.innerHTML=`${areaTabs}${modeToggle}${body}<div style="height:24px"></div>`;
+  },
+  setAreaInv(a){this.area=a;this.view_inventario();},
+  setInvMode(m){this.invMode=m;this.view_inventario();},
+  setTurnoInv(t){this.turno=t;this.view_inventario();},
+  setInvTipo(t){this.invTipo=t;this.view_inventario();},
+
+  async _invConteo(){
+    this.invTipo=this.invTipo||'recepcion';
+    const [inv,conteos]=await Promise.all([Store.inventario(),Store.conteos()]);
+    const due=inv.filter(a=>a.area===this.area && invDue(a.fr,this.turno,this.fecha));
+    const key=(tipo,artId)=>`${this.area}:${this.fecha}:${this.turno}:${tipo}:${artId}`;
+    const cById={}; conteos.forEach(c=>{cById[c.key]=c;});
+    const valOf=(tipo,artId)=>{const c=cById[key(tipo,artId)]; return c?c.cantidad:'';};
+    const turnoTog=`<div class="turno-toggle" style="margin-bottom:10px">
+      <button data-t="TM" class="${this.turno==='TM'?'active':''}" onclick="App.setTurnoInv('TM')">☀️ Mañana</button>
+      <button data-t="TV" class="${this.turno==='TV'?'active':''}" onclick="App.setTurnoInv('TV')">🌙 Tarde</button></div>`;
+    const tipoTog=`<div class="turno-toggle" style="margin-bottom:12px">
+      <button class="${this.invTipo==='recepcion'?'active':''}" style="${this.invTipo==='recepcion'?'background:var(--ok);color:#fff':''}" onclick="App.setInvTipo('recepcion')">🟢 Recibir</button>
+      <button class="${this.invTipo==='entrega'?'active':''}" style="${this.invTipo==='entrega'?'background:var(--warn);color:#fff':''}" onclick="App.setInvTipo('entrega')">🔴 Entregar</button></div>`;
+    if(!due.length) return `${turnoTog}${tipoTog}<div class="card"><div class="empty"><div class="big">📦</div>No hay artículos por contar en este turno.<br>Agrégalos en la pestaña Catálogo.</div></div>`;
+    const rows=due.map(a=>{
+      const val=valOf(this.invTipo,a.id);
+      const recep=valOf('recepcion',a.id), entr=valOf('entrega',a.id);
+      const diff=(recep!==''&&entr!=='')?(entr-recep):null;
+      return `<div class="task">
+        ${a.foto?`<img src="${a.foto}" style="width:42px;height:42px;border-radius:9px;object-fit:cover;flex:0 0 auto" onclick="App._verFotoRef('${a.id}')">`:'<div class="check" style="flex:0 0 auto">📦</div>'}
+        <div class="body"><div class="name">${esc(a.nombre)}</div>
+          <div class="meta">${a.par?`<span class="pill fr">estándar ${a.par}</span>`:''}${diff!==null?`<span class="pill" style="background:${diff<0?'var(--warnbg)':'var(--okbg)'};color:${diff<0?'var(--warn)':'var(--ok)'}">${diff<0?diff+' faltan':'✓ cuadra'}</span>`:''}</div>
+        </div>
+        <input type="number" inputmode="numeric" id="cnt_${a.id}" value="${val}" placeholder="${a.par||0}" style="width:66px;text-align:center;padding:9px;flex:0 0 auto">
+      </div>`;
+    }).join('');
+    return `${turnoTog}${tipoTog}
+      <div class="banner" style="margin-bottom:10px">${this.invTipo==='recepcion'?'🟢 Cuenta lo que RECIBES al entrar a tu turno.':'🔴 Cuenta lo que ENTREGAS al salir. Se compara con lo recibido y marca faltantes.'}</div>
+      <div class="card">${rows}</div>
+      <button class="btn" style="margin-top:12px;${this.invTipo==='entrega'?'background:var(--warn)':'background:var(--ok)'}" onclick="App.guardarConteo()">💾 Guardar ${this.invTipo==='recepcion'?'recepción':'entrega'}</button>`;
+  },
+  async guardarConteo(){
+    const inv=await Store.inventario();
+    const due=inv.filter(a=>a.area===this.area && invDue(a.fr,this.turno,this.fecha));
+    const rows=due.map(a=>{
+      const el=$('#cnt_'+a.id); const cantidad=el&&el.value!==''?parseInt(el.value,10):null;
+      if(cantidad===null||isNaN(cantidad)) return null;
+      return {key:`${this.area}:${this.fecha}:${this.turno}:${this.invTipo}:${a.id}`, area:this.area, fecha:this.fecha, turno:this.turno, tipo:this.invTipo, articuloId:a.id, articuloNombre:a.nombre, cantidad, encargadoId:this.user.id, encargadoNombre:this.user.nombre, ts:Date.now()};
+    }).filter(Boolean);
+    if(!rows.length){toast('Escribe al menos una cantidad');return;}
+    await Store.saveConteos(rows);
+    toast('Conteo guardado');
+    if(this.invTipo==='entrega') await this._mostrarComparacion();
+    else this.view_inventario();
+  },
+  async _mostrarComparacion(){
+    const [inv,conteos]=await Promise.all([Store.inventario(),Store.conteos()]);
+    const arts=inv.filter(a=>a.area===this.area);
+    const key=(tipo,artId)=>`${this.area}:${this.fecha}:${this.turno}:${tipo}:${artId}`;
+    const cById={}; conteos.forEach(c=>cById[c.key]=c);
+    let filas='', totalFalta=0;
+    arts.forEach(a=>{
+      const r=cById[key('recepcion',a.id)], e=cById[key('entrega',a.id)];
+      if(!r&&!e) return;
+      const rc=r?r.cantidad:'—', ec=e?e.cantidad:'—';
+      const diff=(r&&e)?(e.cantidad-r.cantidad):null;
+      if(diff!==null&&diff<0) totalFalta+=Math.abs(diff);
+      filas+=`<div class="stat"><div style="flex:1"><b>${esc(a.nombre)}</b><div class="muted" style="font-size:11px">recibió ${rc} · entrega ${ec}</div></div><div class="num" style="color:${diff<0?'var(--warn)':'var(--ok)'}">${diff===null?'—':(diff<0?diff:'✓')}</div></div>`;
+    });
+    Modal.open(`<h2>Comparación del turno</h2>
+      <div class="muted" style="font-size:13px;margin-bottom:8px">${areaName(this.area)} · ${diaTexto(this.fecha)} · ${this.turno==='TM'?'Mañana':'Tarde'}</div>
+      ${totalFalta>0?`<div class="banner" style="background:var(--warnbg);border-color:var(--warn);color:var(--warn);margin-bottom:10px">⚠ Faltan ${totalFalta} artículo(s) respecto a lo recibido.</div>`:`<div class="banner" style="margin-bottom:10px">✓ Todo cuadra con lo recibido.</div>`}
+      <div class="card">${filas||'<div class="empty">Aún no hay recepción para comparar.</div>'}</div>
+      <button class="btn" style="margin-top:12px" onclick="Modal.close();App.view_inventario()">Cerrar</button>`);
+  },
+
+  async _invCatalogo(){
+    const inv=(await Store.inventario()).filter(a=>a.area===this.area);
+    const list=inv.length?inv.map(a=>`<div class="task">
+      ${a.foto?`<img src="${a.foto}" style="width:42px;height:42px;border-radius:9px;object-fit:cover;flex:0 0 auto">`:'<div class="check" style="flex:0 0 auto">📦</div>'}
+      <div class="body"><div class="name">${esc(a.nombre)}</div>
+        <div class="meta"><span class="pill fr">${INV_FR[a.fr]||a.fr}</span>${a.par?`<span class="pill fr">estándar ${a.par}</span>`:''}${a.unidad?`<span class="pill fr">${esc(a.unidad)}</span>`:''}${!a.foto?'<span class="pill" style="background:var(--warnbg);color:var(--warn)">sin foto</span>':''}</div></div>
+      <button class="cam" onclick="App.modalArticulo('${a.id}')">✏️</button></div>`).join(''):'<div class="empty" style="padding:22px">Aún no hay artículos. Agrega vasos, copas, cuchillos, etc.</div>';
+    return `<div class="banner" style="margin-bottom:10px">📦 Define los artículos a contar de ${areaName(this.area)}, con su foto de referencia y su frecuencia.</div>
+      <div class="card">${list}</div>
+      <button class="btn" style="margin-top:12px" onclick="App.modalArticulo()">＋ Nuevo artículo</button>`;
+  },
+  _verFotoRef(id){ Store.inventario().then(inv=>{const a=inv.find(x=>x.id===id); if(a&&a.foto) Modal.open(`<h2>${esc(a.nombre)}</h2><img src="${a.foto}" style="width:100%;border-radius:12px">${a.par?`<div class="muted" style="margin-top:8px">Estándar: ${a.par} ${esc(a.unidad||'')}</div>`:''}`);}); },
+
+  async modalArticulo(id){
+    const inv=await Store.inventario();
+    const a=id?inv.find(x=>x.id===id):null;
+    this._artFoto = a?(a.foto||''):'';
+    Modal.open(`<h2>${a?'Editar artículo':'Nuevo artículo'} · ${areaName(this.area)}</h2>
+      <label class="fld"><span>Nombre</span><input id="artNombre" value="${a?esc(a.nombre):''}" placeholder="Ej: Copa de vino"></label>
+      <label class="fld"><span>Frecuencia de conteo</span><select id="artFr">
+        <option value="turno" ${a&&a.fr==='turno'?'selected':''}>Cada turno</option>
+        <option value="diario" ${a&&a.fr==='diario'?'selected':''}>Diario (mañana)</option>
+        <option value="semanal" ${a&&a.fr==='semanal'?'selected':''}>Semanal (domingo)</option></select></label>
+      <div style="display:flex;gap:10px">
+        <label class="fld" style="flex:1"><span>Cantidad estándar</span><input type="number" id="artPar" value="${a&&a.par!=null?a.par:''}" placeholder="Ej: 24"></label>
+        <label class="fld" style="flex:1"><span>Unidad</span><input id="artUnidad" value="${a?esc(a.unidad||''):''}" placeholder="piezas"></label>
+      </div>
+      <div class="fld"><span style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px">Foto de referencia</span>
+        <img id="artFotoPrev" src="${this._artFoto||''}" style="${this._artFoto?'':'display:none;'}width:100%;max-height:200px;object-fit:contain;border:1px solid var(--line);border-radius:12px;margin-bottom:8px">
+        <button class="btn ghost" onclick="App._capArtFoto()">📷 ${this._artFoto?'Cambiar':'Tomar'} foto de referencia</button>
+      </div>
+      <button class="btn" style="margin-top:6px" onclick="App.saveArticulo('${id||''}')">Guardar artículo</button>
+      ${a?`<button class="btn danger" style="margin-top:10px" onclick="App.delArticulo('${id}')">🗑 Eliminar</button>`:''}`);
+  },
+  async _capArtFoto(){ const f=await elegirArchivo(); if(!f) return; toast('Procesando…'); const img=await cargarImg(f); this._artFoto=escala(img,800,.7); const p=$('#artFotoPrev'); if(p){p.src=this._artFoto;p.style.display='block';} },
+  async saveArticulo(id){
+    const nombre=$('#artNombre').value.trim(); if(!nombre){toast('Escribe el nombre');return;}
+    const par=$('#artPar').value!==''?parseInt($('#artPar').value,10):null;
+    await Store.saveInventario({id:id||undefined, area:this.area, nombre, fr:$('#artFr').value, par, unidad:$('#artUnidad').value.trim(), foto:this._artFoto||''});
+    this._artFoto=''; Modal.close(); toast('Artículo guardado'); this.view_inventario();
+  },
+  async delArticulo(id){ await Store.deleteInventario(id); Modal.close(); toast('Eliminado'); this.view_inventario(); },
+
+  async _invIncidentes(){
+    const roturas=(await Store.roturas()).filter(r=>r.area===this.area);
+    const list=roturas.length?roturas.map(r=>`<div class="task">
+      ${r.foto?`<img src="${r.foto}" style="width:42px;height:42px;border-radius:9px;object-fit:cover;flex:0 0 auto" onclick="App._verRotura('${r.id}')">`:'<div class="check" style="flex:0 0 auto">⚠️</div>'}
+      <div class="body"><div class="name">${esc(r.nombre)} × ${r.cantidad}</div>
+        <div class="meta"><span class="pill" style="background:var(--warnbg);color:var(--warn)">${esc(r.motivo)}</span>${r.empleadoNombre?`<span class="pill" style="background:#eef4f3;color:var(--brand2)">👤 ${esc((r.empleadoNombre||'').split(' ')[0])}</span>`:''}<span class="pill fr">${fmtFecha(r.fecha)}</span></div></div>
+      <button class="cam" onclick="App._verRotura('${r.id}')">👁</button></div>`).join(''):'<div class="empty" style="padding:22px">Sin incidentes registrados.</div>';
+    return `<button class="btn" style="background:var(--warn);margin-bottom:12px" onclick="App.modalRotura()">⚠️ Reportar rotura / pérdida</button>
+      <div class="section-title" style="margin-top:0">Incidentes de ${areaName(this.area)}</div>
+      <div class="card">${list}</div>`;
+  },
+  async modalRotura(){
+    const [inv,cols]=await Promise.all([Store.inventario(),Store.colaboradores()]);
+    const arts=inv.filter(a=>a.area===this.area);
+    this._rotFile=null;
+    const artOpts=arts.map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('')+'<option value="__otro">Otro (escribir)…</option>';
+    const empOpts=cols.filter(c=>c.rol==='colaborador').map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+    Modal.open(`<h2>⚠️ Reportar rotura / pérdida</h2>
+      <label class="fld"><span>Artículo</span><select id="rotArt" onchange="App._rotArtChange()">${artOpts||'<option value="__otro">Otro…</option>'}</select></label>
+      <div id="rotOtroBox" class="hidden"><label class="fld"><span>Nombre del artículo</span><input id="rotOtro" placeholder="Ej: Plato hondo"></label></div>
+      <div style="display:flex;gap:10px">
+        <label class="fld" style="flex:1"><span>Cantidad</span><input type="number" id="rotCant" value="1" inputmode="numeric"></label>
+        <label class="fld" style="flex:1"><span>Motivo</span><select id="rotMotivo"><option value="roto">Roto</option><option value="perdido">Perdido</option><option value="prestado">Prestado</option><option value="otro">Otro</option></select></label>
+      </div>
+      <label class="fld"><span>Empleado responsable</span><select id="rotEmp">${empOpts||'<option value="">— sin colaboradores —</option>'}</select></label>
+      <label class="fld"><span>Nota (opcional)</span><input id="rotNota" placeholder="Detalle de lo ocurrido"></label>
+      <div class="fld"><span style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px">Foto de evidencia (compromiso)</span>
+        <img id="rotFotoPrev" style="display:none;width:100%;max-height:220px;object-fit:contain;border:1px solid var(--line);border-radius:12px;margin-bottom:8px">
+        <button class="btn ghost" onclick="App._capRotFoto()">📷 Tomar foto de evidencia</button>
+      </div>
+      <button class="btn" style="margin-top:6px;background:var(--warn)" onclick="App.saveRotura()">Registrar y enviar</button>`);
+  },
+  _rotArtChange(){ $('#rotOtroBox').classList.toggle('hidden', $('#rotArt').value!=='__otro'); },
+  async _capRotFoto(){ const f=await elegirArchivo(); if(!f) return; toast('Procesando…'); this._rotFile=f; const img=await cargarImg(f); const prev=escala(img,700,.7); const p=$('#rotFotoPrev'); if(p){p.src=prev;p.style.display='block';} },
+  async saveRotura(){
+    const artSel=$('#rotArt').value; const inv=await Store.inventario();
+    let nombre = artSel==='__otro' ? $('#rotOtro').value.trim() : (inv.find(x=>x.id===artSel)||{}).nombre||'';
+    if(!nombre){toast('Indica el artículo');return;}
+    const cantidad=parseInt($('#rotCant').value,10)||1;
+    const motivo=$('#rotMotivo').value;
+    const empId=$('#rotEmp').value; const cols=await Store.colaboradores(); const emp=cols.find(c=>c.id===empId);
+    const nota=$('#rotNota').value.trim();
+    const hora=new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+    let fotoThumb='', fullFile=null;
+    if(this._rotFile){
+      const stamp=[`${CONFIG.NEGOCIO} · Compromiso`, `${nombre} × ${cantidad} — ${motivo}`, `Responsable: ${emp?emp.nombre:'—'} · ${fmtFecha(this.fecha)} ${hora}`];
+      const r=await procesarImagen(this._rotFile, stamp); fotoThumb=r.thumb; fullFile=r.full;
+    }
+    await Store.saveRotura({area:this.area, articuloId:artSel==='__otro'?null:artSel, nombre, cantidad, motivo,
+      empleadoId:empId||null, empleadoNombre:emp?emp.nombre:'', reportadoPor:this.user.nombre,
+      fecha:this.fecha, turno:this.turno, foto:fotoThumb, nota, ts:Date.now()});
+    Modal.close(); this._rotFile=null; toast('Incidente registrado');
+    const caption=`⚠️ *${CONFIG.NEGOCIO} · ${areaName(this.area)}* — ${motivo.toUpperCase()}\n${nombre} × ${cantidad}\n👤 Responsable: ${emp?emp.nombre:'—'}\n📅 ${fmtFecha(this.fecha)} ${hora}${nota?`\n📝 ${nota}`:''}`;
+    if(fullFile){ await compartirWhatsApp(fullFile, caption, 'compromiso.jpg'); }
+    else { try{await navigator.clipboard.writeText(caption);}catch(e){}; window.open('https://wa.me/?text='+encodeURIComponent(caption),'_blank'); }
+    this.view_inventario();
+  },
+  _verRotura(id){ Store.roturas().then(rs=>{ const r=rs.find(x=>x.id===id); if(!r)return;
+    Modal.open(`<h2>${esc(r.nombre)} × ${r.cantidad}</h2>
+      <div class="muted" style="font-size:13px;margin-bottom:8px">${areaName(r.area)} · ${esc(r.motivo)} · ${fmtFecha(r.fecha)} · Responsable: ${esc(r.empleadoNombre||'—')}</div>
+      ${r.foto?`<img src="${r.foto}" style="width:100%;border-radius:12px">`:''}
+      ${r.nota?`<p style="margin-top:8px">${esc(r.nota)}</p>`:''}
+      <div class="row-actions" style="margin-top:12px"><button class="btn danger sm" onclick="App._delRotura('${id}')">🗑 Eliminar</button></div>`);
+  }); },
+  async _delRotura(id){ await Store.deleteRotura(id); Modal.close(); this.view_inventario(); toast('Eliminado'); },
+
   /* ---------- VISTA: EQUIPO ---------- */
   async view_equipo(){
     const v=$('#view');const cols=await Store.colaboradores();
@@ -1283,6 +1533,8 @@ function escala(img,max,q,stampLines){
   }
   return c.toDataURL('image/jpeg',q);
 }
+function elegirArchivo(){ return new Promise(res=>{ const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.capture='environment'; inp.onchange=()=>res(inp.files[0]||null); inp.click(); }); }
+function cargarImg(file){ return new Promise((res,rej)=>{ const img=new Image(); const u=URL.createObjectURL(file); img.onload=()=>{URL.revokeObjectURL(u);res(img);}; img.onerror=rej; img.src=u; }); }
 async function compartirWhatsApp(file,caption,fname){
   // 1) Web Share con archivo (mejor experiencia: comparte la FOTO)
   if(navigator.canShare && file && navigator.canShare({files:[file]})){
