@@ -90,6 +90,18 @@ header.top .chip button{color:#fff;opacity:.85;font-size:12px}
 .task .cam{width:40px;height:40px;flex:0 0 auto;border-radius:10px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:18px;background:var(--card)}
 .task .cam.has{background:var(--okbg);border-color:var(--ok)}
 .subhead{padding:9px 14px;background:linear-gradient(0deg,var(--line),transparent);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--brand2)}
+/* Secciones plegables */
+details.sec{border-bottom:1px solid var(--line)}
+details.sec:last-child{border-bottom:none}
+details.sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 14px;background:linear-gradient(0deg,var(--line),transparent);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--brand2)}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary .chev{margin-left:auto;transition:transform .2s;font-size:13px;opacity:.7}
+details.sec[open]>summary .chev{transform:rotate(90deg)}
+details.sec>summary .cnt{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:1px 8px;font-size:11px;color:var(--muted)}
+details.sec>summary .cnt.full{background:var(--okbg);color:var(--ok);border-color:var(--ok)}
+/* Barra flotante de envío */
+.sendbar{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));z-index:25;display:flex;flex-direction:column;align-items:center;gap:8px;padding:0 12px;pointer-events:none}
+.sendbar button{pointer-events:auto;background:#25D366;color:#08351b;font-weight:800;border-radius:14px;padding:13px 18px;font-size:15px;box-shadow:0 6px 20px rgba(0,0,0,.22);width:100%;max-width:480px;display:flex;align-items:center;justify-content:center;gap:8px}
 
 /* Progress */
 .progress{height:10px;background:var(--line);border-radius:999px;overflow:hidden}
@@ -431,11 +443,27 @@ const Store = {
 };
 
 /* =====================================================================
+   BANDEJA DE ENVÍO (IndexedDB) — guarda fotos localmente hasta enviarlas.
+   Sobrevive a cerrar la app por accidente.
+   ===================================================================== */
+const Outbox = {
+  _db:null,
+  _open(){ if(this._db) return Promise.resolve(this._db);
+    return new Promise((res,rej)=>{ const r=indexedDB.open('mozza_outbox',1);
+      r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains('fotos')) r.result.createObjectStore('fotos',{keyPath:'id'}); };
+      r.onsuccess=()=>{ this._db=r.result; res(this._db); };
+      r.onerror=()=>rej(r.error); }); },
+  async add(item){ const db=await this._open(); return new Promise((res,rej)=>{ const tx=db.transaction('fotos','readwrite'); tx.objectStore('fotos').put(item); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); },
+  async all(){ try{ const db=await this._open(); return await new Promise((res,rej)=>{ const tx=db.transaction('fotos','readonly'); const rq=tx.objectStore('fotos').getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>rej(rq.error); }); }catch(e){ return []; } },
+  async del(ids){ const db=await this._open(); return new Promise((res,rej)=>{ const tx=db.transaction('fotos','readwrite'); const st=tx.objectStore('fotos'); ids.forEach(id=>st.delete(id)); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
+};
+
+/* =====================================================================
    APP
    ===================================================================== */
 const App = {
   user:null, tab:'hoy', area:'barra', turno:turnoActual(), fecha:hoyISO(),
-  hoyFilter:null, _pin:'', _who:null, _cache:{},
+  hoyFilter:null, _openSecs:new Set(), _pin:'', _who:null, _cache:{},
 
   async start(){
     await Store.init();
@@ -548,12 +576,18 @@ const App = {
 
     let total=0,done=0;
     const ownerOf=c=>{const g=asign[c.id]; return g? g.colaboradorNombre : '';};
-    const rowCat=c=>{const d=isDone('cat',c.id);total++;if(d)done++;
-      return taskRow('cat',c,c.nombre,d,evOf('cat',c.id), (mgr?ownerOf(c):''));};
 
     let secHTML='';
     for(const s in secciones){
-      secHTML+=`<div class="subhead">${esc(s)}</div>`+secciones[s].map(rowCat).join('');
+      const rows=secciones[s]; let sd=0;
+      const rowsHTML=rows.map(c=>{const d=isDone('cat',c.id);total++;if(d)done++;if(d)sd++;
+        return taskRow('cat',c,c.nombre,d,evOf('cat',c.id),(mgr?ownerOf(c):''));}).join('');
+      const full=sd===rows.length;
+      const key=this.area+'|'+this.turno+'|'+s;
+      const open=this._openSecs.has(key);
+      secHTML+=`<details class="sec" ${open?'open':''} ontoggle="App._toggleSec('${key.replace(/'/g,"\\'")}',this.open)">
+        <summary><span style="flex:1">${esc(s)}</span><span class="cnt ${full?'full':''}">${sd}/${rows.length}</span><span class="chev">▸</span></summary>
+        ${rowsHTML}</details>`;
     }
 
     let extrasHTML='';
@@ -567,6 +601,16 @@ const App = {
     const emptyMsg = soloMias
       ? '<div class="empty"><div class="big">🎉</div>No tienes tareas asignadas para este turno.<br>Cambia a "Toda el área" para ver el resto.</div>'
       : '<div class="empty"><div class="big">🎉</div>No hay actividades programadas para hoy en esta área.</div>';
+
+    // Bandeja de envío (fotos guardadas localmente, pendientes de mandar a WhatsApp)
+    const outbox=(await Outbox.all()).filter(x=>x.colaboradorId===this.user.id);
+    const obByArea={}; outbox.forEach(x=>{obByArea[x.area]=(obByArea[x.area]||0)+1;});
+    const areasPend=SEED.areas.filter(a=>obByArea[a.id]);
+    const sendBar = outbox.length ? `<div class="sendbar">${
+      areasPend.map(a=>`<button onclick="App.sendOutboxArea('${a.id}')">📲 Enviar ${a.nombre} · ${obByArea[a.id]} foto${obByArea[a.id]>1?'s':''}</button>`).join('')
+    }</div>` : '';
+    const spacer = 24 + areasPend.length*58;
+
     v.innerHTML=`
       ${areaTabs}
       <div class="card" style="padding:14px;margin-bottom:6px">
@@ -580,16 +624,19 @@ const App = {
         <button data-t="TM" class="${this.turno==='TM'?'active':''}" onclick="App.setTurno('TM')">☀️ Turno mañana</button>
         <button data-t="TV" class="${this.turno==='TV'?'active':''}" onclick="App.setTurno('TV')">🌙 Turno tarde</button>
       </div>
+      ${outbox.length?`<div class="banner" style="margin-bottom:12px">📸 Tienes <b>${outbox.length}</b> evidencia(s) guardada(s) en la bandeja. Cuando termines, usa el botón verde para enviarlas por área.</div>`:''}
       ${filtroHTML}
       ${extrasHTML}
       <div class="section-title">${soloMias?'Mis actividades':'Checklist · '+areaName(this.area)}</div>
       <div class="card">${secHTML||emptyMsg}</div>
       ${mgr?`<button class="btn ghost" style="margin-top:14px" onclick="App.modalNuevaTarea()">＋ Asignar tarea puntual</button>`:''}
-      <div style="height:20px"></div>`;
+      <div style="height:${spacer}px"></div>
+      ${sendBar}`;
   },
   setArea(a){this.area=a;this.view_hoy();},
   setTurno(t){this.turno=t;this.view_hoy();},
   setHoyFilter(f){this.hoyFilter=f;this.view_hoy();},
+  _toggleSec(key,open){ if(open) this._openSecs.add(key); else this._openSecs.delete(key); },
 
   async toggle(tipo,ref){
     const [cat,extras]=await Promise.all([Store.catalogo(),Store.extras()]);
@@ -616,7 +663,7 @@ const App = {
       toast('Procesando foto…');
       const {thumb, full} = await procesarImagen(file);
       const caption = captionFor(item, this.fecha, this.turno, this.user.nombre);
-      // guardar evidencia (miniatura) + marcar completada
+      // 1) guardar evidencia (miniatura) en la galería/reportes + marcar completada
       await Store.addEvidencia({
         tipo, ref, area:item.area, tarea:item.nombre, seccion:item.seccion||'',
         fecha:this.fecha, turno:this.turno,
@@ -625,11 +672,37 @@ const App = {
       });
       await Store.setCompletion({tipo,ref,area:item.area,fecha:this.fecha,turno:this.turno,
         colaboradorId:this.user.id,colaboradorNombre:this.user.nombre,nombre:item.nombre,evid:true}, true);
-      // compartir a WhatsApp
-      await compartirWhatsApp(full, caption, file.name);
+      // 2) guardar la foto en la BANDEJA local (NO se envía todavía)
+      const hora=new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+      const blob = (full instanceof Blob) ? full : file;   // 'full' es un File comprimido (~1600px)
+      await Outbox.add({ id:uid(), area:item.area, tarea:item.nombre, seccion:item.seccion||'',
+        fecha:this.fecha, turno:this.turno, colaboradorId:this.user.id, colaboradorNombre:this.user.nombre,
+        caption, hora, blob, ts:Date.now() });
+      toast('✅ Guardada en la bandeja — toca "Enviar" cuando termines');
       this.view_hoy();
     };
     inp.click();
+  },
+
+  /* Enviar el lote de un área a WhatsApp (una vez por área) */
+  async sendOutboxArea(area){
+    const items=(await Outbox.all()).filter(x=>x.area===area && x.colaboradorId===this.user.id);
+    if(!items.length){ toast('No hay evidencias de esa área'); return; }
+    const files=items.map(x=>new File([x.blob], `evidencia_${x.id}.jpg`, {type:(x.blob&&x.blob.type)||'image/jpeg'}));
+    const lineas=items.map((x,i)=>`${i+1}. ${x.tarea} · ${x.turno==='TM'?'AM':'PM'} · ${x.hora}`).join('\n');
+    const msg=`🧾 *${CONFIG.NEGOCIO} · ${areaName(area)}* — Evidencias ${fmtFecha(items[0].fecha)}\n👤 ${items[0].colaboradorNombre}\n\n${lineas}`;
+    let sent=false;
+    if(navigator.canShare && navigator.canShare({files})){
+      try{ await navigator.share({files, text:msg, title:`Evidencias ${areaName(area)}`}); sent=true; }
+      catch(e){ if(e&&e.name==='AbortError'){ toast('Envío cancelado'); return; } }
+    }
+    if(!sent){ // fallback: copiar texto y abrir WhatsApp (adjuntas las fotos manual)
+      try{ await navigator.clipboard.writeText(msg); }catch(e){}
+      toast('Copié el texto — adjunta las fotos en WhatsApp');
+      window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank'); sent=true;
+    }
+    if(sent){ await Outbox.del(items.map(x=>x.id)); toast(`Enviadas ${items.length} de ${areaName(area)}`); }
+    this.view_hoy();
   },
 
   /* ---------- VISTA: TAREAS (gestión) ---------- */
