@@ -1,13 +1,16 @@
 /* Service Worker · Mozzafiato Tareas
    Cachea el shell para que la app funcione sin conexión / con conexión lenta. */
-const CACHE = 'mozza-v1';
+const CACHE = 'mozza-v2';
 const SHELL = [
   './',
   './index.html',
   './app.data.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './logo-header.png',
+  './logo-login.png',
+  './logo-print.png'
 ];
 
 self.addEventListener('install', e => {

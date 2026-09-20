@@ -102,6 +102,33 @@ details.sec>summary .cnt.full{background:var(--okbg);color:var(--ok);border-colo
 /* Barra flotante de envío */
 .sendbar{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));z-index:25;display:flex;flex-direction:column;align-items:center;gap:8px;padding:0 12px;pointer-events:none}
 .sendbar button{pointer-events:auto;background:#25D366;color:#08351b;font-weight:800;border-radius:14px;padding:13px 18px;font-size:15px;box-shadow:0 6px 20px rgba(0,0,0,.22);width:100%;max-width:480px;display:flex;align-items:center;justify-content:center;gap:8px}
+.brandlogo{height:22px;width:auto;display:block}
+
+/* ===== Impresión de bitácora en blanco (tamaño carta) ===== */
+#printArea{display:none}
+@media print{
+  @page{ size: letter landscape; margin: 10mm; }
+  html,body{ background:#fff !important; }
+  body.printing > *:not(#printArea){ display:none !important; }
+  body.printing #printArea{ display:block !important; }
+  .bp-table tr{ page-break-inside:avoid; }
+}
+.bp-wrap{ color:#000; font-family:Arial,Helvetica,sans-serif; }
+.bp-head{ display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+.bp-head img{ height:44px; width:auto; }
+.bp-head .bp-title{ flex:1; }
+.bp-t1{ font-size:15px; font-weight:800; letter-spacing:.5px; }
+.bp-t2{ font-size:12px; margin-top:2px; }
+.bp-mes{ font-size:11px; white-space:nowrap; }
+.bp-table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+.bp-table th, .bp-table td{ border:0.5pt solid #000; font-size:6.2pt; line-height:1.03; overflow:hidden; }
+.bp-table th.bp-act, .bp-table td.bp-act{ width:132px; text-align:left; padding:2px 4px; font-size:6.6pt; }
+.bp-table th.bp-fr, .bp-table td.bp-fr{ width:16px; text-align:center; }
+.bp-table th.bp-d{ text-align:center; padding:1px 0; font-size:6pt; }
+.bp-table th.bp-sub{ font-size:4.6pt; text-align:center; padding:0; color:#333; }
+.bp-table td.bp-cell{ height:15px; }
+.bp-table tr.bp-sec td{ background:#e8e8e8; font-weight:800; text-transform:uppercase; font-size:6.4pt; padding:2px 4px; border-top:1pt solid #000; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.bp-foot{ font-size:8pt; margin-top:6px; }
 
 /* Progress */
 .progress{height:10px;background:var(--line);border-radius:999px;overflow:hidden}
@@ -173,15 +200,7 @@ textarea{min-height:70px;resize:vertical}
 <!-- ============ LOGIN ============ -->
 <div id="login" class="login-wrap">
   <div style="text-align:center">
-    <svg class="logo" width="56" height="56" viewBox="0 0 64 64" style="margin:0 auto" aria-hidden="true">
-      <g fill="#12403f">
-        <path d="M32 6c3 6 3 12 0 18-3-6-3-12 0-18z"/>
-        <path d="M32 24c-4-5-9-8-15-9 2 7 7 12 15 14 8-2 13-7 15-14-6 1-11 4-15 9z" opacity=".85"/>
-        <path d="M14 26c-3 5-4 11-3 17 6-2 10-7 12-13-3-1-6-2-9-4z" opacity=".6"/>
-        <path d="M50 26c3 5 4 11 3 17-6-2-10-7-12-13 3-1 6-2 9-4z" opacity=".6"/>
-      </g>
-    </svg>
-    <h1 style="font-size:26px;margin-top:8px">Mozzafiato</h1>
+    <img src="logo-login.png" alt="Mozzafiato" style="width:210px;max-width:66%;height:auto;margin:0 auto 8px;display:block">
     <div class="muted" style="font-size:13px">Gestor de tareas y bitácoras</div>
   </div>
   <div id="loginStep1">
@@ -201,18 +220,8 @@ textarea{min-height:70px;resize:vertical}
 <!-- ============ APP ============ -->
 <div id="app" class="hidden">
   <header class="top">
-    <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
-      <g fill="#ffffff">
-        <path d="M32 6c3 6 3 12 0 18-3-6-3-12 0-18z"/>
-        <path d="M32 24c-4-5-9-8-15-9 2 7 7 12 15 14 8-2 13-7 15-14-6 1-11 4-15 9z" opacity=".85"/>
-        <path d="M14 26c-3 5-4 11-3 17 6-2 10-7 12-13-3-1-6-2-9-4z" opacity=".6"/>
-        <path d="M50 26c3 5 4 11 3 17-6-2-10-7-12-13 3-1 6-2 9-4z" opacity=".6"/>
-      </g>
-    </svg>
-    <div>
-      <div class="ttl">Mozzafiato</div>
-      <div class="sub" id="topSub">Tareas</div>
-    </div>
+    <img class="brandlogo" src="logo-header.png" alt="Mozzafiato">
+    <div class="sub" id="topSub" style="margin-left:2px">Tareas</div>
     <div class="spacer"></div>
     <div class="chip"><span id="userChip">—</span><button onclick="App.logout()" title="Salir">⏻</button></div>
   </header>
@@ -231,6 +240,7 @@ textarea{min-height:70px;resize:vertical}
 </div>
 
 <div id="modalRoot"></div>
+<div id="printArea"></div>
 <div id="toast"></div>
 
 <script src="app.data.js"></script>
@@ -935,10 +945,16 @@ const App = {
         <div class="area-scroll">${areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaRep('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>
       </div>
 
-      <div class="section-title">Bitácora mensual (imagen UHD)</div>
+      <div class="section-title">Bitácora en blanco para imprimir · COFEPRIS</div>
       <div class="card" style="padding:14px">
-        <div class="muted" style="font-size:13px;margin-bottom:10px">Genera la cuadrícula del mes (días × actividades, TM/TV) en alta resolución, tal cual tus bitácoras.</div>
-        <button class="btn" onclick="App.genBitacora()">🖼️ Generar imagen de bitácora</button>
+        <div class="muted" style="font-size:13px;margin-bottom:10px">Hoja tamaño <b>carta</b>, limpia y con todas las actividades del área, para pegar en pared y llenar a mano.</div>
+        <button class="btn" onclick="App.imprimirBitacora('${this.area}')">🖨️ Imprimir bitácora en blanco de ${areaName(this.area)}</button>
+      </div>
+
+      <div class="section-title">Bitácora mensual llena (imagen UHD)</div>
+      <div class="card" style="padding:14px">
+        <div class="muted" style="font-size:13px;margin-bottom:10px">Genera la cuadrícula del mes con lo ya registrado en la app (días × actividades, TM/TV) en alta resolución.</div>
+        <button class="btn ghost" onclick="App.genBitacora()">🖼️ Generar imagen de bitácora</button>
         <button class="btn ghost" style="margin-top:10px" onclick="App.genPDF()">📄 Exportar a PDF</button>
       </div>
 
@@ -1012,6 +1028,40 @@ const App = {
     const w=canvas.width*ratio,h=canvas.height*ratio;
     pdf.addImage(img,'PNG',(pw-w)/2,(ph-h)/2,w,h);
     pdf.save(`Bitacora_${areaName(this.area)}_${MESES[mes]}_${anio}.pdf`);
+  },
+
+  /* Imprimir bitácora EN BLANCO (carta) para llenar a mano (COFEPRIS) */
+  async imprimirBitacora(area){
+    const cat=await Store.catalogo();
+    const items=cat.filter(c=>c.area===area);
+    if(!items.length){ toast('Esa área no tiene actividades'); return; }
+    const secciones={}; items.forEach(c=>{(secciones[c.seccion]=secciones[c.seccion]||[]).push(c);});
+    const dias=Array.from({length:31},(_,i)=>i+1);
+    const colspan=2+dias.length*2;
+    const head1=`<th class="bp-act">Actividad a realizar</th><th class="bp-fr">FR</th>`+dias.map(d=>`<th class="bp-d" colspan="2">${d}</th>`).join('');
+    const head2=`<th class="bp-act"></th><th class="bp-fr"></th>`+dias.map(()=>`<th class="bp-sub">TM</th><th class="bp-sub">TV</th>`).join('');
+    let rows='';
+    for(const s in secciones){
+      rows+=`<tr class="bp-sec"><td colspan="${colspan}">${esc(s)}</td></tr>`;
+      rows+=secciones[s].map(c=>`<tr><td class="bp-act">${esc(c.nombre)}</td><td class="bp-fr">${c.fr}</td>`+dias.map(()=>`<td class="bp-cell"></td><td class="bp-cell"></td>`).join('')+`</tr>`).join('');
+    }
+    const html=`<div class="bp-wrap">
+      <div class="bp-head">
+        <img src="logo-print.png" alt="Mozzafiato">
+        <div class="bp-title"><div class="bp-t1">BITÁCORA DE LIMPIEZA</div><div class="bp-t2">Área: <b>${esc(areaName(area))}</b></div></div>
+        <div class="bp-mes">Mes y año: ____________________</div>
+      </div>
+      <table class="bp-table"><thead><tr>${head1}</tr><tr>${head2}</tr></thead><tbody>${rows}</tbody></table>
+      <div class="bp-foot"><b>FR (frecuencia):</b> 1 = Diario · 2 = Cada 2 días · 3 = Cada 3 días · 7 = Domingos &nbsp;·&nbsp; TM = Turno mañana · TV = Turno tarde</div>
+    </div>`;
+    const pa=$('#printArea'); pa.innerHTML=html;
+    document.body.classList.add('printing');
+    const done=()=>{ document.body.classList.remove('printing'); pa.innerHTML=''; window.removeEventListener('afterprint',done); };
+    window.addEventListener('afterprint',done);
+    // precargar el logo antes de imprimir para que salga en la hoja
+    const pre=new Image();
+    pre.onload=pre.onerror=()=>setTimeout(()=>window.print(),120);
+    pre.src='logo-print.png';
   },
 
   /* ---------- VISTA: SUPERVISIÓN (en vivo) ---------- */
