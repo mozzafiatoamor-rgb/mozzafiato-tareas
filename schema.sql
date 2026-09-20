@@ -95,3 +95,20 @@ alter publication supabase_realtime add table extras;
 alter publication supabase_realtime add table evidencias;
 
 -- Listo. Ahora carga los datos iniciales corriendo seed.sql (opcional).
+
+-- =====================================================================
+-- Grupos de trabajo (asignaciones de actividades a colaboradores)
+-- =====================================================================
+create table if not exists grupos (
+  id text primary key,
+  area text not null,
+  nombre text not null,
+  colaborador_id text,
+  colaborador_nombre text,
+  turno text not null default 'ambos',
+  items jsonb not null default '[]'
+);
+alter table grupos enable row level security;
+drop policy if exists p_all on grupos;
+create policy p_all on grupos for all using (true) with check (true);
+alter publication supabase_realtime add table grupos;

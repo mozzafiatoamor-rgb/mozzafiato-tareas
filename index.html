@@ -101,10 +101,10 @@ nav.tabbar{
   border-top:1px solid var(--line);display:flex;
   padding:6px 6px calc(6px + env(safe-area-inset-bottom));
 }
-nav.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;color:var(--muted);font-size:10.5px;font-weight:600;border-radius:12px}
+nav.tabbar button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 1px;color:var(--muted);font-size:9.5px;font-weight:600;border-radius:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 nav.tabbar button.active{color:var(--brand)}
 nav.tabbar button.active .ic{transform:translateY(-1px)}
-nav.tabbar .ic{font-size:21px;line-height:1}
+nav.tabbar .ic{font-size:20px;line-height:1}
 
 /* Inputs */
 label.fld{display:block;margin:12px 0}
@@ -208,6 +208,7 @@ textarea{min-height:70px;resize:vertical}
 
   <nav class="tabbar" id="tabbar">
     <button data-tab="hoy" class="active"><span class="ic">✅</span>Hoy</button>
+    <button data-tab="supervision"><span class="ic">📡</span>Supervisión</button>
     <button data-tab="tareas"><span class="ic">📋</span>Tareas</button>
     <button data-tab="evidencias"><span class="ic">📷</span>Evidencias</button>
     <button data-tab="reportes"><span class="ic">📊</span>Reportes</button>
@@ -248,6 +249,9 @@ const FR_LABEL={1:'Diario',2:'Cada 2 días',3:'Cada 3 días',7:'Domingos',0:'Una
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600);}
 function turnoActual(){return new Date().getHours()<15?'TM':'TV';}
+function LSget(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function LSset(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function LSdel(k){try{localStorage.removeItem(k);}catch(e){}}
 function dueOn(fr,iso){
   if(fr===0) return false;
   const d=new Date(iso+'T12:00:00');
@@ -266,32 +270,41 @@ const Store = {
     if(CLOUD){
       await this._loadSB();
       this.sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-      try{ this.sb.channel('mozza-rt').on('postgres_changes',{event:'*',schema:'public'},()=>{ if(window.App&&App.user&&!document.getElementById('modalRoot').innerHTML){ clearTimeout(App._rtT); App._rtT=setTimeout(()=>App.refresh(),400); } }).subscribe(); }catch(e){}
+      // Sincronización en vivo: re-render de la vista actual ante cualquier cambio
+      try{ this.sb.channel('mozza-rt').on('postgres_changes',{event:'*',schema:'public'},()=>{
+        if(window.App&&App.user&&!document.getElementById('modalRoot').innerHTML){ clearTimeout(App._rtT); App._rtT=setTimeout(()=>App.refresh(),400); }
+      }).subscribe(); }catch(e){}
     } else {
-      this._d = JSON.parse(localStorage.getItem(LS)||'null');
+      this._d = JSON.parse(LSget(LS)||'null');
       if(!this._d){
         this._d = {
           colaboradores: SEED.colaboradores.map(c=>({...c})),
           catalogo: SEED.catalogo.map((c,i)=>({id:'cat_'+i, ...c})),
           extras: [],
           completions: [],
-          evidencias: []
+          evidencias: [],
+          grupos: []
         };
         this._save();
       }
+      if(!this._d.grupos) this._d.grupos=[];
     }
   },
-  _save(){ if(!CLOUD) localStorage.setItem(LS, JSON.stringify(this._d)); },
+  _save(){ if(!CLOUD) LSset(LS, JSON.stringify(this._d)); },
   _loadSB(){ return new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';s.onload=res;s.onerror=rej;document.head.appendChild(s);}); },
+  // Mapeo camelCase (app) <-> snake_case (columnas de la base)
+  _toDB(o){ const r={}; for(const k in o) r[k.replace(/[A-Z]/g,m=>'_'+m.toLowerCase())]=o[k]; return r; },
+  _fromDB(o){ if(!o||typeof o!=='object') return o; const r={}; for(const k in o) r[k.replace(/_([a-z])/g,(_,c)=>c.toUpperCase())]=o[k]; return r; },
+  _rows(a){ return (a||[]).map(x=>this._fromDB(x)); },
 
   /* ---- Colaboradores ---- */
   async colaboradores(){
-    if(CLOUD){const {data}=await this.sb.from('colaboradores').select('*').order('nombre');return data||[];}
+    if(CLOUD){const {data}=await this.sb.from('colaboradores').select('*').order('nombre');return this._rows(data);}
     return this._d.colaboradores;
   },
   async saveColaborador(c){
     if(!c.id) c.id=uid();
-    if(CLOUD){await this.sb.from('colaboradores').upsert(c);return c;}
+    if(CLOUD){await this.sb.from('colaboradores').upsert(this._toDB(c));return c;}
     const i=this._d.colaboradores.findIndex(x=>x.id===c.id);
     if(i<0) this._d.colaboradores.push(c); else this._d.colaboradores[i]=c;
     this._save();return c;
@@ -303,12 +316,12 @@ const Store = {
 
   /* ---- Catálogo ---- */
   async catalogo(){
-    if(CLOUD){const {data}=await this.sb.from('catalogo').select('*');return data||[];}
+    if(CLOUD){const {data}=await this.sb.from('catalogo').select('*');return this._rows(data);}
     return this._d.catalogo;
   },
   async saveCatalogo(item){
     if(!item.id) item.id=uid();
-    if(CLOUD){await this.sb.from('catalogo').upsert(item);return item;}
+    if(CLOUD){await this.sb.from('catalogo').upsert(this._toDB(item));return item;}
     const i=this._d.catalogo.findIndex(x=>x.id===item.id);
     if(i<0) this._d.catalogo.push(item); else this._d.catalogo[i]=item;
     this._save();return item;
@@ -320,12 +333,12 @@ const Store = {
 
   /* ---- Extras (tareas puntuales) ---- */
   async extras(){
-    if(CLOUD){const {data}=await this.sb.from('extras').select('*').order('fecha');return data||[];}
+    if(CLOUD){const {data}=await this.sb.from('extras').select('*').order('fecha');return this._rows(data);}
     return this._d.extras;
   },
   async saveExtra(t){
     if(!t.id) t.id=uid();
-    if(CLOUD){await this.sb.from('extras').upsert(t);return t;}
+    if(CLOUD){await this.sb.from('extras').upsert(this._toDB(t));return t;}
     const i=this._d.extras.findIndex(x=>x.id===t.id);
     if(i<0) this._d.extras.push(t); else this._d.extras[i]=t;
     this._save();return t;
@@ -337,14 +350,14 @@ const Store = {
 
   /* ---- Completions ---- */
   async completions(){
-    if(CLOUD){const {data}=await this.sb.from('completions').select('*');return data||[];}
+    if(CLOUD){const {data}=await this.sb.from('completions').select('*');return this._rows(data);}
     return this._d.completions;
   },
   async setCompletion(rec, on){
     // rec: {ref, tipo:'cat'|'extra', area, fecha, turno, colaboradorId, colaboradorNombre}
     const key=`${rec.tipo}:${rec.ref}:${rec.fecha}:${rec.turno}`;
     if(CLOUD){
-      if(on){await this.sb.from('completions').upsert({...rec,key},{onConflict:'key'});}
+      if(on){await this.sb.from('completions').upsert(this._toDB({...rec,key,ts:Date.now()}),{onConflict:'key'});}
       else {await this.sb.from('completions').delete().eq('key',key);}
       return;
     }
@@ -355,12 +368,12 @@ const Store = {
 
   /* ---- Evidencias ---- */
   async evidencias(){
-    if(CLOUD){const {data}=await this.sb.from('evidencias').select('*').order('ts',{ascending:false});return data||[];}
+    if(CLOUD){const {data}=await this.sb.from('evidencias').select('*').order('ts',{ascending:false});return this._rows(data);}
     return [...this._d.evidencias].sort((a,b)=>b.ts-a.ts);
   },
   async addEvidencia(ev){
     ev.id=uid();ev.ts=Date.now();
-    if(CLOUD){await this.sb.from('evidencias').insert(ev);return ev;}
+    if(CLOUD){await this.sb.from('evidencias').insert(this._toDB(ev));return ev;}
     this._d.evidencias.push(ev);
     // límite para no llenar el almacenamiento del dispositivo en demo
     if(this._d.evidencias.length>120) this._d.evidencias=this._d.evidencias.slice(-120);
@@ -369,6 +382,23 @@ const Store = {
   async deleteEvidencia(id){
     if(CLOUD){await this.sb.from('evidencias').delete().eq('id',id);return;}
     this._d.evidencias=this._d.evidencias.filter(x=>x.id!==id);this._save();
+  },
+
+  /* ---- Grupos de trabajo (asignaciones) ---- */
+  async grupos(){
+    if(CLOUD){const {data}=await this.sb.from('grupos').select('*').order('nombre');return this._rows(data).map(g=>({...g, items: g.items||[]}));}
+    return this._d.grupos;
+  },
+  async saveGrupo(g){
+    if(!g.id) g.id=uid();
+    if(CLOUD){await this.sb.from('grupos').upsert(this._toDB(g));return g;}
+    const i=this._d.grupos.findIndex(x=>x.id===g.id);
+    if(i<0) this._d.grupos.push(g); else this._d.grupos[i]=g;
+    this._save();return g;
+  },
+  async deleteGrupo(id){
+    if(CLOUD){await this.sb.from('grupos').delete().eq('id',id);return;}
+    this._d.grupos=this._d.grupos.filter(x=>x.id!==id);this._save();
   }
 };
 
@@ -377,11 +407,11 @@ const Store = {
    ===================================================================== */
 const App = {
   user:null, tab:'hoy', area:'barra', turno:turnoActual(), fecha:hoyISO(),
-  _pin:'', _who:null, _cache:{},
+  hoyFilter:null, _pin:'', _who:null, _cache:{},
 
   async start(){
     await Store.init();
-    const saved=JSON.parse(localStorage.getItem('mozza_user')||'null');
+    const saved=JSON.parse(LSget('mozza_user')||'null');
     await this.renderLogin();
     if(saved){ this.user=saved; this.enterApp(); }
     if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
@@ -417,11 +447,11 @@ const App = {
   _drawDots(){$$('.pindots i').forEach((d,i)=>d.classList.toggle('on',i<this._pin.length));},
   pinOk(){
     if(this._pin===this._who.pin){
-      this.user=this._who; localStorage.setItem('mozza_user',JSON.stringify(this.user));
+      this.user=this._who; LSset('mozza_user',JSON.stringify(this.user));
       this.enterApp();
     } else { toast('PIN incorrecto'); this._pin=''; this._drawDots(); navigator.vibrate&&navigator.vibrate(120); }
   },
-  logout(){ localStorage.removeItem('mozza_user'); location.reload(); },
+  logout(){ LSdel('mozza_user'); location.reload(); },
   refresh(){ if(this.user && typeof this['view_'+this.tab]==='function') this['view_'+this.tab](); },
 
   enterApp(){
@@ -432,8 +462,9 @@ const App = {
     if(this.user.rol==='colaborador' && this.user.area) this.area=this.user.area;
     // ocultar pestañas de gestión a colaboradores
     const mgr=this.user.rol==='encargado';
+    const soloEncargado=['supervision','tareas','equipo'];
     $$('#tabbar button').forEach(b=>{
-      if(['equipo'].includes(b.dataset.tab)) b.classList.toggle('hidden',!mgr);
+      if(soloEncargado.includes(b.dataset.tab)) b.classList.toggle('hidden',!mgr);
     });
     this.go('hoy');
   },
@@ -441,8 +472,7 @@ const App = {
   go(tab){
     this.tab=tab;
     $$('#tabbar button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
-    ({hoy:'Tareas de hoy',tareas:'Gestión de tareas',evidencias:'Evidencias',reportes:'Reportes',equipo:'Equipo'});
-    $('#topSub').textContent={hoy:'Tareas de hoy',tareas:'Gestión de tareas',evidencias:'Evidencias',reportes:'Reportes',equipo:'Equipo'}[tab];
+    $('#topSub').textContent={hoy:'Tareas de hoy',supervision:'Supervisión en vivo',tareas:'Tareas y grupos',evidencias:'Evidencias',reportes:'Reportes',equipo:'Equipo'}[tab];
     this['view_'+tab]();
   },
 
@@ -450,16 +480,38 @@ const App = {
   async view_hoy(){
     const v=$('#view');
     const mgr=this.user.rol==='encargado';
-    const [cat, comps, extras] = await Promise.all([Store.catalogo(),Store.completions(),Store.extras()]);
+    const [cat, comps, extras, grupos] = await Promise.all([Store.catalogo(),Store.completions(),Store.extras(),Store.grupos()]);
     const areas=SEED.areas;
+
+    // mapa de asignaciones: catId -> grupo (para el área actual)
+    const asign={};
+    grupos.filter(g=>g.area===this.area).forEach(g=>(g.items||[]).forEach(cid=>{ if(!asign[cid]) asign[cid]=g; }));
+    const turnoMatch=(gt,t)=> !gt || gt==='ambos' || gt===t;
+
+    // ¿tiene el colaborador tareas asignadas en esta área?
+    const tengoAsignadas = !mgr && Object.values(asign).some(g=>g.colaboradorId===this.user.id);
+    // filtro: 'mis' | 'area'  (encargado siempre 'area')
+    if(mgr) this.hoyFilter='area';
+    else if(this.hoyFilter==null) this.hoyFilter = tengoAsignadas ? 'mis' : 'area';
+    const soloMias = this.hoyFilter==='mis';
+
     const areaTabs = mgr ? `<div class="area-scroll" style="margin-bottom:12px">${
         areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setArea('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')
       }</div>` : '';
 
-    const dueCat = cat.filter(c=>c.area===this.area && dueOn(c.fr,this.fecha));
-    const todayExtras = extras.filter(e=>e.area===this.area && e.fecha===this.fecha);
+    // filtro Mis tareas / Área para colaboradores con asignaciones
+    const filtroHTML = (!mgr && tengoAsignadas) ? `
+      <div class="turno-toggle" style="margin-bottom:12px">
+        <button class="${soloMias?'active':''}" style="${soloMias?'background:var(--brand);color:#fff':''}" onclick="App.setHoyFilter('mis')">🙋 Mis tareas</button>
+        <button class="${!soloMias?'active':''}" style="${!soloMias?'background:var(--brand);color:#fff':''}" onclick="App.setHoyFilter('area')">🧩 Toda el área</button>
+      </div>` : '';
 
-    // agrupar por sección
+    let dueCat = cat.filter(c=>c.area===this.area && dueOn(c.fr,this.fecha));
+    if(soloMias){
+      dueCat = dueCat.filter(c=> asign[c.id] && asign[c.id].colaboradorId===this.user.id && turnoMatch(asign[c.id].turno,this.turno));
+    }
+    let todayExtras = extras.filter(e=>e.area===this.area && e.fecha===this.fecha && (!soloMias || (e.asignadoId===this.user.id && e.turno===this.turno)));
+
     const secciones={};
     dueCat.forEach(c=>{(secciones[c.seccion]=secciones[c.seccion]||[]).push(c);});
 
@@ -467,7 +519,9 @@ const App = {
     const evOf=(tipo,ref)=>comps.find(x=>x.tipo===tipo&&x.ref===ref&&x.fecha===this.fecha&&x.turno===this.turno&&x.evid);
 
     let total=0,done=0;
-    const rowCat=c=>{const d=isDone('cat',c.id);total++;if(d)done++;return taskRow('cat',c,c.nombre,d,evOf('cat',c.id));};
+    const ownerOf=c=>{const g=asign[c.id]; return g? g.colaboradorNombre : '';};
+    const rowCat=c=>{const d=isDone('cat',c.id);total++;if(d)done++;
+      return taskRow('cat',c,c.nombre,d,evOf('cat',c.id), (mgr?ownerOf(c):''));};
 
     let secHTML='';
     for(const s in secciones){
@@ -478,15 +532,18 @@ const App = {
     if(todayExtras.length){
       extrasHTML=`<div class="section-title">Tareas puntuales de hoy</div><div class="card">`+
         todayExtras.map(e=>{const d=isDone('extra',e.id);total++;if(d)done++;
-          return taskRow('extra',e,e.nombre+(e.asignadoNombre?` · 👤 ${esc(e.asignadoNombre)}`:''),d,evOf('extra',e.id));}).join('')+`</div>`;
+          return taskRow('extra',e,e.nombre,d,evOf('extra',e.id), e.asignadoNombre||'');}).join('')+`</div>`;
     }
 
     const pct= total? Math.round(done/total*100):0;
+    const emptyMsg = soloMias
+      ? '<div class="empty"><div class="big">🎉</div>No tienes tareas asignadas para este turno.<br>Cambia a "Toda el área" para ver el resto.</div>'
+      : '<div class="empty"><div class="big">🎉</div>No hay actividades programadas para hoy en esta área.</div>';
     v.innerHTML=`
       ${areaTabs}
       <div class="card" style="padding:14px;margin-bottom:6px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div><b style="font-size:15px">${areaName(this.area)}</b><div class="muted" style="font-size:12px">${diaTexto(this.fecha)}</div></div>
+          <div><b style="font-size:15px">${soloMias?'Mis tareas':areaName(this.area)}</b><div class="muted" style="font-size:12px">${diaTexto(this.fecha)}</div></div>
           <div style="text-align:right"><div style="font-weight:800;font-size:20px">${done}/${total}</div><div class="muted" style="font-size:11px">completadas</div></div>
         </div>
         <div class="progress"><i style="width:${pct}%"></i></div>
@@ -495,14 +552,16 @@ const App = {
         <button data-t="TM" class="${this.turno==='TM'?'active':''}" onclick="App.setTurno('TM')">☀️ Turno mañana</button>
         <button data-t="TV" class="${this.turno==='TV'?'active':''}" onclick="App.setTurno('TV')">🌙 Turno tarde</button>
       </div>
+      ${filtroHTML}
       ${extrasHTML}
-      <div class="section-title">Checklist · ${areaName(this.area)}</div>
-      <div class="card">${secHTML||'<div class="empty"><div class="big">🎉</div>No hay actividades programadas para hoy en esta área.</div>'}</div>
+      <div class="section-title">${soloMias?'Mis actividades':'Checklist · '+areaName(this.area)}</div>
+      <div class="card">${secHTML||emptyMsg}</div>
       ${mgr?`<button class="btn ghost" style="margin-top:14px" onclick="App.modalNuevaTarea()">＋ Asignar tarea puntual</button>`:''}
       <div style="height:20px"></div>`;
   },
   setArea(a){this.area=a;this.view_hoy();},
   setTurno(t){this.turno=t;this.view_hoy();},
+  setHoyFilter(f){this.hoyFilter=f;this.view_hoy();},
 
   async toggle(tipo,ref){
     const [cat,extras]=await Promise.all([Store.catalogo(),Store.extras()]);
@@ -548,10 +607,27 @@ const App = {
   /* ---------- VISTA: TAREAS (gestión) ---------- */
   async view_tareas(){
     const v=$('#view');const mgr=this.user.rol==='encargado';
-    const cat=await Store.catalogo();
+    const [cat,grupos]=await Promise.all([Store.catalogo(),Store.grupos()]);
     const areas=SEED.areas;
     const areaTabs=`<div class="area-scroll" style="margin-bottom:12px">${
       areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaTareas('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>`;
+
+    // --- Grupos del área ---
+    const gArea=grupos.filter(g=>g.area===this.area);
+    const gruposHTML = gArea.length ? gArea.map(g=>`
+      <div class="task">
+        <div class="body">
+          <div class="name">${esc(g.nombre)}</div>
+          <div class="meta">
+            <span class="pill" style="background:#eef4f3;color:var(--brand2)">👤 ${esc((g.colaboradorNombre||'Sin asignar').split(' ')[0])}</span>
+            <span class="pill fr">${g.turno==='ambos'?'Ambos turnos':(g.turno==='TM'?'Mañana':'Tarde')}</span>
+            <span class="pill fr">${(g.items||[]).length} act.</span>
+          </div>
+        </div>
+        <button class="cam" onclick="App.modalEditGrupo('${g.id}')">✏️</button>
+      </div>`).join('') : '<div class="empty" style="padding:22px">Aún no hay grupos. Crea uno para repartir actividades entre tu equipo.</div>';
+
+    // --- Catálogo del área ---
     const items=cat.filter(c=>c.area===this.area);
     const secciones={};items.forEach(c=>{(secciones[c.seccion]=secciones[c.seccion]||[]).push(c);});
     let html='';
@@ -566,9 +642,14 @@ const App = {
         </div>`).join('');
     }
     v.innerHTML=`${areaTabs}
-      ${mgr?`<div class="banner demo" style="margin-bottom:10px">✏️ Toca una actividad para editar su frecuencia, o agrega nuevas al checklist.</div>`:''}
+      <div class="section-title" style="margin-top:6px">Grupos de trabajo · ${areaName(this.area)}</div>
+      <div class="banner" style="margin-bottom:10px">👥 Agrupa actividades y asígnalas a un colaborador. Ese colaborador las verá en "Mis tareas".</div>
+      <div class="card">${gruposHTML}</div>
+      <button class="btn" style="margin-top:12px" onclick="App.modalEditGrupo()">＋ Nuevo grupo de trabajo</button>
+
+      <div class="section-title">Checklist fijo · ${areaName(this.area)}</div>
       <div class="card">${html||'<div class="empty">Sin actividades</div>'}</div>
-      ${mgr?`<button class="btn" style="margin-top:14px" onclick="App.modalEditCat()">＋ Nueva actividad fija</button>
+      ${mgr?`<button class="btn ghost" style="margin-top:12px" onclick="App.modalEditCat()">＋ Nueva actividad fija</button>
       <button class="btn ghost" style="margin-top:10px" onclick="App.modalNuevaTarea()">＋ Tarea puntual (a un colaborador)</button>`:''}
       <div style="height:20px"></div>`;
   },
@@ -705,6 +786,101 @@ const App = {
     pdf.save(`Bitacora_${areaName(this.area)}_${MESES[mes]}_${anio}.pdf`);
   },
 
+  /* ---------- VISTA: SUPERVISIÓN (en vivo) ---------- */
+  async view_supervision(){
+    const v=$('#view'); const today=this.fecha;
+    const [cat,comps,grupos,extras,cols]=await Promise.all([Store.catalogo(),Store.completions(),Store.grupos(),Store.extras(),Store.colaboradores()]);
+    const nowT=turnoActual();
+    const doneSet=new Set(comps.filter(c=>c.fecha===today).map(c=>`${c.tipo}:${c.ref}:${c.turno}`));
+    const isDone=(tipo,ref,turno)=>doneSet.has(`${tipo}:${ref}:${turno}`);
+    const overdue=(turno,done)=> !done && turno==='TM' && nowT==='TV';
+
+    // Resumen por área (ambos turnos del día)
+    const areasHTML=SEED.areas.map(a=>{
+      const due=cat.filter(c=>c.area===a.id && dueOn(c.fr,today));
+      let total=0,done=0,late=0;
+      due.forEach(c=>['TM','TV'].forEach(t=>{total++;const d=isDone('cat',c.id,t);if(d)done++;else if(overdue(t,d))late++;}));
+      extras.filter(e=>e.area===a.id&&e.fecha===today).forEach(e=>{total++;const d=isDone('extra',e.id,e.turno);if(d)done++;else if(overdue(e.turno,d))late++;});
+      const pct=total?Math.round(done/total*100):0;
+      return `<div class="card" style="padding:14px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><b>${a.emoji} ${a.nombre}</b><span class="num">${done}/${total}</span></div>
+        <div class="progress" style="margin:8px 0 6px"><i style="width:${pct}%"></i></div>
+        <div style="font-size:12px;color:var(--muted)">${total-done} pendientes${late?` · <span style="color:var(--warn);font-weight:800">⚠ ${late} atrasadas</span>`:''}</div>
+      </div>`;
+    }).join('');
+
+    // Resumen por colaborador
+    const colabs=cols.filter(c=>c.rol==='colaborador');
+    const asignByCol={};
+    grupos.forEach(g=>{(g.items||[]).forEach(cid=>{ (asignByCol[g.colaboradorId]=asignByCol[g.colaboradorId]||[]).push({cid,turno:g.turno}); });});
+    const catById={};cat.forEach(c=>catById[c.id]=c);
+    const colHTML=colabs.map(col=>{
+      let total=0,done=0,late=0;
+      (asignByCol[col.id]||[]).forEach(({cid,turno})=>{
+        const c=catById[cid]; if(!c||!dueOn(c.fr,today))return;
+        (turno==='ambos'?['TM','TV']:[turno]).forEach(t=>{total++;const d=isDone('cat',cid,t);if(d)done++;else if(overdue(t,d))late++;});
+      });
+      extras.filter(e=>e.asignadoId===col.id&&e.fecha===today).forEach(e=>{total++;const d=isDone('extra',e.id,e.turno);if(d)done++;else if(overdue(e.turno,d))late++;});
+      const pct=total?Math.round(done/total*100):0;
+      return `<div class="stat">
+        <div style="flex:1">
+          <b>${esc(col.nombre)}</b> <span class="muted" style="font-size:12px">${col.area?'· '+areaName(col.area):''}</span>
+          <div class="bar" style="margin-top:6px"><i style="width:${pct}%;${late?'background:var(--warn)':''}"></i></div>
+          <div class="muted" style="font-size:11.5px;margin-top:3px">${total?`${done}/${total} de sus tareas${late?` · <span style="color:var(--warn);font-weight:700">${late} atrasadas</span>`:''}`:'sin tareas asignadas hoy'}</div>
+        </div>
+        <div class="num">${total?pct+'%':'—'}</div>
+      </div>`;
+    }).join('');
+
+    v.innerHTML=`
+      <div class="section-title" style="margin-top:6px">Hoy por área · ${diaTexto(today)}</div>
+      ${areasHTML}
+      <div class="section-title">Por colaborador</div>
+      <div class="card">${colHTML||'<div class="empty">Sin colaboradores</div>'}</div>
+      <div class="muted" style="font-size:11.5px;text-align:center;margin-top:12px">📡 Se actualiza solo en tiempo real</div>
+      <div style="height:20px"></div>`;
+  },
+
+  /* ---------- MODALES: GRUPOS ---------- */
+  async modalEditGrupo(id){
+    const [grupos,cols,cat]=await Promise.all([Store.grupos(),Store.colaboradores(),Store.catalogo()]);
+    const g=id?grupos.find(x=>x.id===id):null;
+    const items=cat.filter(c=>c.area===this.area);
+    const sel=new Set(g?(g.items||[]):[]);
+    const secciones={};items.forEach(c=>{(secciones[c.seccion]=secciones[c.seccion]||[]).push(c);});
+    let itemsHTML='';
+    for(const s in secciones){
+      itemsHTML+=`<div class="subhead" style="margin:0 -12px">${esc(s)}</div>`+secciones[s].map(c=>`
+        <label style="display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line)">
+          <input type="checkbox" value="${c.id}" ${sel.has(c.id)?'checked':''} style="width:20px;height:20px;flex:0 0 auto">
+          <span style="flex:1">${esc(c.nombre)} <span class="muted" style="font-size:11px">· ${FR_LABEL[c.fr]}</span></span>
+        </label>`).join('');
+    }
+    const colOpts=cols.filter(c=>c.rol==='colaborador').map(c=>`<option value="${c.id}" ${g&&g.colaboradorId===c.id?'selected':''}>${esc(c.nombre)}${c.area?' ('+areaName(c.area)+')':''}</option>`).join('');
+    Modal.open(`
+      <h2>${g?'Editar grupo':'Nuevo grupo'} · ${areaName(this.area)}</h2>
+      <label class="fld"><span>Nombre del grupo</span><input id="grNombre" value="${g?esc(g.nombre):''}" placeholder="Ej: Cafeteras y barra"></label>
+      <label class="fld"><span>Asignar a</span><select id="grUser">${colOpts||'<option value="">— sin colaboradores —</option>'}</select></label>
+      <label class="fld"><span>Turno</span><select id="grTurno">
+        <option value="ambos" ${g&&g.turno==='ambos'?'selected':''}>Ambos turnos</option>
+        <option value="TM" ${g&&g.turno==='TM'?'selected':''}>Solo mañana</option>
+        <option value="TV" ${g&&g.turno==='TV'?'selected':''}>Solo tarde</option>
+      </select></label>
+      <div class="section-title" style="margin-left:0">Actividades del grupo</div>
+      <div class="card" id="grItems" style="padding:2px 12px;max-height:42vh;overflow:auto">${itemsHTML||'<div class="empty">Sin actividades en el área</div>'}</div>
+      <button class="btn" style="margin-top:14px" onclick="App.saveGrupo('${id||''}')">Guardar grupo</button>
+      ${g?`<button class="btn danger" style="margin-top:10px" onclick="App.delGrupo('${id}')">🗑 Eliminar grupo</button>`:''}`);
+  },
+  async saveGrupo(id){
+    const nombre=$('#grNombre').value.trim(); if(!nombre){toast('Ponle nombre al grupo');return;}
+    const items=$$('#grItems input:checked').map(i=>i.value);
+    if(!items.length){toast('Elige al menos una actividad');return;}
+    const uidSel=$('#grUser').value; const cols=await Store.colaboradores(); const u=cols.find(c=>c.id===uidSel);
+    await Store.saveGrupo({id:id||undefined, area:this.area, nombre, colaboradorId:uidSel||null, colaboradorNombre:u?u.nombre:'', turno:$('#grTurno').value, items});
+    Modal.close(); toast('Grupo guardado'); this.view_tareas();
+  },
+  async delGrupo(id){ await Store.deleteGrupo(id); Modal.close(); toast('Grupo eliminado'); this.view_tareas(); },
+
   /* ---------- VISTA: EQUIPO ---------- */
   async view_equipo(){
     const v=$('#view');const cols=await Store.colaboradores();
@@ -796,12 +972,13 @@ const App = {
 function iniciales(n){return (n||'?').split(' ').map(p=>p[0]).slice(0,2).join('').toUpperCase();}
 function areaName(id){const a=SEED.areas.find(x=>x.id===id);return a?a.nombre:id;}
 function diaTexto(iso){const d=new Date(iso+'T12:00:00');const dias=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];return `${dias[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;}
-function taskRow(tipo,item,label,done,hasEv){
+function taskRow(tipo,item,label,done,hasEv,owner){
+  const ownerPill = owner ? `<span class="pill" style="background:#eef4f3;color:var(--brand2)">👤 ${esc((owner||'').split(' ')[0])}</span>` : '';
   return `<div class="task ${done?'done':''}">
     <button class="check" onclick="App.toggle('${tipo}','${item.id}')">✓</button>
     <div class="body">
       <div class="name">${esc(label)}</div>
-      <div class="meta">${item.fr!==undefined&&item.fr!==0?`<span class="pill fr">🔁 ${FR_LABEL[item.fr]}</span>`:''}${done?'<span class="pill fr" style="background:var(--okbg);color:var(--ok)">✓ Hecho</span>':''}</div>
+      <div class="meta">${item.fr!==undefined&&item.fr!==0?`<span class="pill fr">🔁 ${FR_LABEL[item.fr]}</span>`:''}${ownerPill}${done?'<span class="pill fr" style="background:var(--okbg);color:var(--ok)">✓ Hecho</span>':''}</div>
     </div>
     <button class="cam ${hasEv?'has':''}" onclick="App.foto('${tipo}','${item.id}')" title="Foto de evidencia">${hasEv?'✅':'📷'}</button>
   </div>`;
