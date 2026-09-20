@@ -661,7 +661,13 @@ const App = {
     inp.onchange=async()=>{
       const file=inp.files[0]; if(!file) return;
       toast('Procesando foto…');
-      const {thumb, full} = await procesarImagen(file);
+      const horaSello=new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+      const stampLines=[
+        `${CONFIG.NEGOCIO} · ${areaName(item.area)}`,
+        item.nombre,
+        `${this.user.nombre} · ${fmtFecha(this.fecha)} ${horaSello} · ${this.turno==='TM'?'Mañana':'Tarde'}`
+      ];
+      const {thumb, full} = await procesarImagen(file, stampLines);
       const caption = captionFor(item, this.fecha, this.turno, this.user.nombre);
       // 1) guardar evidencia (miniatura) en la galería/reportes + marcar completada
       await Store.addEvidencia({
@@ -1237,16 +1243,14 @@ function captionFor(item,fecha,turno,quien){
 /* =====================================================================
    IMÁGENES: compresión + compartir WhatsApp
    ===================================================================== */
-function procesarImagen(file){
+function procesarImagen(file, stampLines){
   return new Promise(res=>{
     const img=new Image();const url=URL.createObjectURL(file);
     img.onload=()=>{
-      // full: reescala a máx 1600px para el envío (UHD razonable, más ligero)
-      const full=escala(img,1600,.9);
-      // thumb: miniatura para galería
-      const thumb=escala(img,640,.72);
+      // full: reescala a máx 1600px + sello de datos, para envío/gallería
+      const full=escala(img,1600,.9,stampLines);
+      const thumb=escala(img,640,.72,stampLines);
       URL.revokeObjectURL(url);
-      // full como File para compartir
       fetch(full).then(r=>r.blob()).then(b=>{
         res({thumb, full:new File([b],'evidencia.jpg',{type:'image/jpeg'})});
       });
@@ -1254,11 +1258,29 @@ function procesarImagen(file){
     img.src=url;
   });
 }
-function escala(img,max,q){
+function _fitText(x,text,maxW){ text=String(text||''); if(x.measureText(text).width<=maxW) return text;
+  let t=text; while(t.length>1 && x.measureText(t+'…').width>maxW) t=t.slice(0,-1); return t+'…'; }
+function escala(img,max,q,stampLines){
   let {width:w,height:h}=img;
   if(Math.max(w,h)>max){const r=max/Math.max(w,h);w=Math.round(w*r);h=Math.round(h*r);}
   const c=document.createElement('canvas');c.width=w;c.height=h;
-  c.getContext('2d').drawImage(img,0,0,w,h);
+  const x=c.getContext('2d');
+  x.drawImage(img,0,0,w,h);
+  // Sello de datos incrustado en la foto (fecha, empleado, tarea, área)
+  if(stampLines && stampLines.length){
+    const fs=Math.max(12,Math.round(w*0.030));
+    const pad=Math.round(fs*0.6), lh=Math.round(fs*1.35);
+    const barH=pad*2+lh*stampLines.length;
+    x.fillStyle='rgba(10,20,18,0.58)'; x.fillRect(0,h-barH,w,barH);
+    x.fillStyle='#c8a24a'; x.fillRect(0,h-barH,Math.max(4,Math.round(w*0.014)),barH);
+    const tx=pad+Math.round(w*0.02), maxW=w-tx-pad;
+    x.textBaseline='middle'; x.textAlign='left';
+    stampLines.forEach((ln,i)=>{
+      x.font=(i===0?'700 ':'')+fs+'px -apple-system,Arial,sans-serif';
+      x.fillStyle=i===0?'#ffe4a3':'#f2f5f2';
+      x.fillText(_fitText(x,ln,maxW), tx, h-barH+pad+lh*i+lh/2);
+    });
+  }
   return c.toDataURL('image/jpeg',q);
 }
 async function compartirWhatsApp(file,caption,fname){
