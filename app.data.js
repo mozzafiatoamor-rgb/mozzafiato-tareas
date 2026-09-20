@@ -13,11 +13,23 @@ window.SEED = {
   /* Colaboradores de ejemplo (edítalos en la pestaña Equipo).
      rol: 'encargado' o 'colaborador' · pin de 4 dígitos */
   colaboradores: [
-    { id: 'u_admin', nombre: 'Gustavo',  rol: 'encargado',   area: null,     pin: '1111' },
-    { id: 'u_barra', nombre: 'Encargado Barra', rol: 'encargado', area: 'barra', pin: '2222' },
-    { id: 'u_c1',    nombre: 'Colaborador 1', rol: 'colaborador', area: 'barra', pin: '0001' },
-    { id: 'u_c2',    nombre: 'Colaborador 2', rol: 'colaborador', area: 'piso',  pin: '0002' },
-    { id: 'u_c3',    nombre: 'Colaborador 3', rol: 'colaborador', area: 'cocina',pin: '0003' }
+    { id: 'u_admin',      nombre: 'Gustavo',   rol: 'encargado',   area: null,     pin: '1111' },
+    // --- Barra ---
+    { id: 'emp_abigail',  nombre: 'Abigail',   rol: 'encargado',   area: 'barra',  pin: '2001' },
+    { id: 'emp_julio',    nombre: 'Julio',     rol: 'encargado',   area: 'barra',  pin: '2003' },
+    { id: 'emp_ulises',   nombre: 'Ulises',    rol: 'colaborador', area: 'barra',  pin: '2002' },
+    // --- Piso ---
+    { id: 'emp_benjamin', nombre: 'Benjamin',  rol: 'encargado',   area: 'piso',   pin: '3003' },
+    { id: 'emp_ferneli',  nombre: 'Ferneli',   rol: 'colaborador', area: 'piso',   pin: '3001' },
+    { id: 'emp_yuliana',  nombre: 'Yuliana',   rol: 'colaborador', area: 'piso',   pin: '3002' },
+    { id: 'emp_abril',    nombre: 'Abril',     rol: 'colaborador', area: 'piso',   pin: '3004' },
+    // --- Cocina ---
+    { id: 'emp_fatima',   nombre: 'Fatima',    rol: 'encargado',   area: 'cocina', pin: '4001' },
+    { id: 'emp_eucebio',  nombre: 'Eucebio',   rol: 'encargado',   area: 'cocina', pin: '4004' },
+    { id: 'emp_eduardo',  nombre: 'Eduardo',   rol: 'colaborador', area: 'cocina', pin: '4002' },
+    { id: 'emp_irvin',    nombre: 'Irvin',     rol: 'colaborador', area: 'cocina', pin: '4003' },
+    { id: 'emp_joseluis', nombre: 'Jose Luis', rol: 'colaborador', area: 'cocina', pin: '4005' },
+    { id: 'emp_yessica',  nombre: 'Yessica',   rol: 'colaborador', area: 'cocina', pin: '4006' }
   ],
 
   /* Catálogo de actividades = las bitácoras digitalizadas */
