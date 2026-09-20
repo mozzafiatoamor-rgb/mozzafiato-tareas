@@ -228,8 +228,8 @@ textarea{min-height:70px;resize:vertical}
    dispositivo). Con las llaves puestas, sincroniza en tiempo real.
    ===================================================================== */
 const CONFIG = {
-  SUPABASE_URL: '',   // ej: https://xxxxxxxx.supabase.co
-  SUPABASE_KEY: '',   // ej: la "anon public key"
+  SUPABASE_URL: 'https://ujmecfdsbqtwxusqqiqi.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_XY_anhqYY9rhgZau67wkcw_WkMx_PRA',
   NEGOCIO: 'Mozzafiato'
 };
 const CLOUD = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY);
@@ -266,6 +266,7 @@ const Store = {
     if(CLOUD){
       await this._loadSB();
       this.sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+      try{ this.sb.channel('mozza-rt').on('postgres_changes',{event:'*',schema:'public'},()=>{ if(window.App&&App.user&&!document.getElementById('modalRoot').innerHTML){ clearTimeout(App._rtT); App._rtT=setTimeout(()=>App.refresh(),400); } }).subscribe(); }catch(e){}
     } else {
       this._d = JSON.parse(localStorage.getItem(LS)||'null');
       if(!this._d){
@@ -421,6 +422,7 @@ const App = {
     } else { toast('PIN incorrecto'); this._pin=''; this._drawDots(); navigator.vibrate&&navigator.vibrate(120); }
   },
   logout(){ localStorage.removeItem('mozza_user'); location.reload(); },
+  refresh(){ if(this.user && typeof this['view_'+this.tab]==='function') this['view_'+this.tab](); },
 
   enterApp(){
     $('#login').classList.add('hidden');
