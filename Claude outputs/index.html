@@ -103,18 +103,6 @@ details.sec>summary .cnt.full{background:var(--okbg);color:var(--ok);border-colo
 .sendbar{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));z-index:25;display:flex;flex-direction:column;align-items:center;gap:8px;padding:0 12px;pointer-events:none}
 .sendbar button{pointer-events:auto;background:#25D366;color:#08351b;font-weight:800;border-radius:14px;padding:13px 18px;font-size:15px;box-shadow:0 6px 20px rgba(0,0,0,.22);width:100%;max-width:480px;display:flex;align-items:center;justify-content:center;gap:8px}
 .brandlogo{height:22px;width:auto;display:block}
-/* Inicio por rol */
-.hello{font-size:20px;font-weight:700;margin-top:4px}
-.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.qa{display:flex;flex-direction:column;align-items:flex-start;gap:1px;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--qc,var(--brand));border-radius:14px;padding:13px;text-align:left;box-shadow:var(--shadow);font-weight:800;font-size:14px;color:var(--ink)}
-.qa:active{transform:translateY(1px)}
-.qa .qa-ic{font-size:22px;margin-bottom:2px}
-.qa small{font-weight:600;color:var(--muted);font-size:11px}
-.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center;box-shadow:var(--shadow)}
-.tile-n{font-size:26px;font-weight:800}
-.tile-l{font-size:11px;color:var(--muted);margin-top:2px}
-.stat-row{font-size:12px;color:var(--muted);margin-top:6px}
 
 /* ===== Impresión de bitácora en blanco (tamaño carta) ===== */
 #printArea{display:none}
@@ -307,21 +295,6 @@ function extraDueOn(e,iso){ if(e.dias&&e.dias.length){return e.dias.includes(new
 // --- Inventario ---
 const INV_FR={turno:'Cada turno', diario:'Diario', semanal:'Semanal'};
 function invDue(fr,turno,iso){ if(fr==='diario') return turno==='TM'; if(fr==='semanal') return turno==='TM'&&new Date(iso+'T12:00:00').getDay()===0; return true; /* 'turno' */ }
-// Estado del día de un área (para los paneles de Inicio)
-function estadoDelDia(area, today, D){
-  const nowT=turnoActual();
-  const doneSet=new Set(D.comps.filter(c=>c.fecha===today).map(c=>`${c.tipo}:${c.ref}:${c.turno}`));
-  const isDone=(t,r,tu)=>doneSet.has(`${t}:${r}:${tu}`);
-  const overdue=(tu,d)=>!d&&tu==='TM'&&nowT==='TV';
-  let total=0,done=0,late=0;
-  D.cat.filter(c=>c.area===area&&dueOn(c.fr,today)).forEach(c=>['TM','TV'].forEach(t=>{total++;const d=isDone('cat',c.id,t);if(d)done++;else if(overdue(t,d))late++;}));
-  D.extras.filter(e=>e.area===area&&extraDueOn(e,today)).forEach(e=>{total++;const d=isDone('extra',e.id,e.turno);if(d)done++;else if(overdue(e.turno,d))late++;});
-  const incid=D.roturas.filter(r=>r.area===area&&r.fecha===today).length;
-  let faltan=0; const arts={};
-  D.conteos.filter(c=>c.area===area&&c.fecha===today).forEach(c=>{ const k=c.turno+':'+c.articuloId; (arts[k]=arts[k]||{})[c.tipo]=c.cantidad; });
-  Object.values(arts).forEach(o=>{ if(o.recepcion!=null&&o.entrega!=null){const d=o.entrega-o.recepcion; if(d<0) faltan+=Math.abs(d);} });
-  return {total,done,late,pend:total-done,incid,faltan};
-}
 
 /* =====================================================================
    CAPA DE DATOS  (misma interfaz para DEMO y NUBE)
@@ -737,80 +710,6 @@ const App = {
   setArea(a){this.area=a;this.view_hoy();},
   setTurno(t){this.turno=t;this.view_hoy();},
   setHoyFilter(f){this.hoyFilter=f;this.view_hoy();},
-  _areaScroll(fn){ if(!this.esDueno()) return ''; return `<div class="area-scroll" style="margin-bottom:12px">${SEED.areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.${fn}('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>`; },
-  qaTurno(tipo){ this.invMode='conteo'; this.invTipo=tipo; this.go('inventario'); },
-  ownerArea(a){ this.area=a; this.go('supervision'); },
-
-  /* ---------- INICIO: ENCARGADO DE ÁREA ---------- */
-  async _homeManager(){
-    const v=$('#view'); const today=this.fecha; const area=this.area;
-    const [cat,comps,extras,roturas,conteos,grupos]=await Promise.all([Store.catalogo(),Store.completions(),Store.extras(),Store.roturas(),Store.conteos(),Store.grupos()]);
-    const est=estadoDelDia(area,today,{cat,comps,extras,roturas,conteos});
-    const pct=est.total?Math.round(est.done/est.total*100):0;
-    const acciones=`<div class="qa-grid">
-      <button class="qa" style="--qc:var(--ok)" onclick="App.qaTurno('recepcion')"><span class="qa-ic">🟢</span>Abrir turno<small>contar recepción</small></button>
-      <button class="qa" style="--qc:var(--warn)" onclick="App.qaTurno('entrega')"><span class="qa-ic">🔴</span>Cerrar turno<small>contar entrega</small></button>
-      <button class="qa" style="--qc:var(--warn)" onclick="App.modalRotura()"><span class="qa-ic">⚠️</span>Reportar rotura<small>con foto</small></button>
-      <button class="qa" style="--qc:var(--brand)" onclick="App.modalNuevaTarea()"><span class="qa-ic">＋</span>Asignar tarea<small>a tu equipo</small></button>
-      <button class="qa" style="--qc:var(--brand2);grid-column:1/-1" onclick="App.go('supervision')"><span class="qa-ic">👁</span>Ver avance del equipo<small>quién va al corriente y quién atrasado</small></button>
-    </div>`;
-    // Mis tareas del turno (si el encargado tiene grupos asignados)
-    const asign={}; grupos.filter(g=>g.area===area).forEach(g=>(g.items||[]).forEach(cid=>{if(!asign[cid])asign[cid]=g;}));
-    const misItems=cat.filter(c=>c.area===area && dueOn(c.fr,today) && asign[c.id] && asign[c.id].colaboradorId===this.user.id && (asign[c.id].turno==='ambos'||asign[c.id].turno===this.turno));
-    const isDone=(tipo,ref)=>comps.some(x=>x.tipo===tipo&&x.ref===ref&&x.fecha===today&&x.turno===this.turno);
-    const evOf=(tipo,ref)=>comps.find(x=>x.tipo===tipo&&x.ref===ref&&x.fecha===today&&x.turno===this.turno&&x.evid);
-    const misHTML = misItems.length ? `<div class="section-title">Mis tareas · ${this.turno==='TM'?'Mañana':'Tarde'}</div><div class="card">${misItems.map(c=>taskRow('cat',c,c.nombre,isDone('cat',c.id),evOf('cat',c.id),'')).join('')}</div>` : '';
-    // bandeja de envío
-    const outbox=(await Outbox.all()).filter(x=>x.colaboradorId===this.user.id);
-    const obByArea={}; outbox.forEach(x=>{obByArea[x.area]=(obByArea[x.area]||0)+1;});
-    const areasPend=SEED.areas.filter(a=>obByArea[a.id]);
-    const sendBar=outbox.length?`<div class="sendbar">${areasPend.map(a=>`<button onclick="App.sendOutboxArea('${a.id}')">📲 Enviar ${a.nombre} · ${obByArea[a.id]} foto${obByArea[a.id]>1?'s':''}</button>`).join('')}</div>`:'';
-    v.innerHTML=`
-      <div class="hello">Hola, <b>${esc(this.user.nombre.split(' ')[0])}</b> 👋<div class="muted" style="font-size:12px">${areaName(area)} · ${diaTexto(today)}</div></div>
-      <div class="turno-toggle" style="margin:12px 0">
-        <button data-t="TM" class="${this.turno==='TM'?'active':''}" onclick="App.setTurno('TM')">☀️ Mañana</button>
-        <button data-t="TV" class="${this.turno==='TV'?'active':''}" onclick="App.setTurno('TV')">🌙 Tarde</button>
-      </div>
-      ${acciones}
-      <div class="card" style="padding:14px;margin-top:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Avance de ${areaName(area)} hoy</b><span class="num">${est.done}/${est.total}</span></div>
-        <div class="progress"><i style="width:${pct}%"></i></div>
-        <div class="stat-row">${est.pend} pendientes${est.late?` · <span style="color:var(--warn);font-weight:800">⚠ ${est.late} atrasadas</span>`:''}${est.incid?` · 🧯 ${est.incid} incidentes`:''}${est.faltan?` · 📉 ${est.faltan} faltan`:''}</div>
-      </div>
-      ${misHTML}
-      <div style="height:${24+areasPend.length*58}px"></div>
-      ${sendBar}`;
-  },
-
-  /* ---------- INICIO: DUEÑO (Gustavo) ---------- */
-  async _homeOwner(){
-    const v=$('#view'); const today=this.fecha;
-    const [cat,comps,extras,roturas,conteos]=await Promise.all([Store.catalogo(),Store.completions(),Store.extras(),Store.roturas(),Store.conteos()]);
-    const D={cat,comps,extras,roturas,conteos};
-    let totIncid=0, totFaltan=0;
-    const cards=SEED.areas.map(a=>{
-      const e=estadoDelDia(a.id,today,D); totIncid+=e.incid; totFaltan+=e.faltan;
-      const pct=e.total?Math.round(e.done/e.total*100):0;
-      return `<div class="card" style="padding:14px;margin-bottom:10px" onclick="App.ownerArea('${a.id}')">
-        <div style="display:flex;justify-content:space-between;align-items:center"><b>${a.emoji} ${a.nombre}</b><span class="num">${e.done}/${e.total}</span></div>
-        <div class="progress" style="margin:8px 0 6px"><i style="width:${pct}%"></i></div>
-        <div class="stat-row">${e.pend} pendientes${e.late?` · <span style="color:var(--warn);font-weight:800">⚠ ${e.late}</span>`:''}${e.incid?` · 🧯 ${e.incid}`:''}${e.faltan?` · 📉 ${e.faltan} faltan`:''}</div>
-      </div>`;
-    }).join('');
-    v.innerHTML=`
-      <div class="hello">Hola, <b>Gustavo</b> 👋<div class="muted" style="font-size:12px">${diaTexto(today)} · Panel del negocio</div></div>
-      <div class="tiles">
-        <div class="tile"><div class="tile-n">${totIncid}</div><div class="tile-l">Incidentes hoy</div></div>
-        <div class="tile"><div class="tile-n" style="color:${totFaltan?'var(--warn)':'var(--ink)'}">${totFaltan}</div><div class="tile-l">Faltantes hoy</div></div>
-      </div>
-      <div class="section-title">Avance por área · hoy</div>
-      ${cards}
-      <div class="qa-grid" style="margin-top:6px">
-        <button class="qa" style="--qc:var(--brand2)" onclick="App.go('supervision')"><span class="qa-ic">📡</span>Supervisión<small>en vivo</small></button>
-        <button class="qa" style="--qc:var(--brand)" onclick="App.go('reportes')"><span class="qa-ic">📊</span>Reportes<small>bitácoras y desempeño</small></button>
-      </div>
-      <div style="height:24px"></div>`;
-  },
   _toggleSec(key,open){ if(open) this._openSecs.add(key); else this._openSecs.delete(key); },
 
   async toggle(tipo,ref){
@@ -890,7 +789,9 @@ const App = {
   async view_tareas(){
     const v=$('#view');const mgr=this.user.rol==='encargado';
     const [cat,grupos,extras,plantillas]=await Promise.all([Store.catalogo(),Store.grupos(),Store.extras(),Store.plantillas()]);
-    const areaTabs=this._areaScroll('setAreaTareas');
+    const areas=SEED.areas;
+    const areaTabs=`<div class="area-scroll" style="margin-bottom:12px">${
+      areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaTareas('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>`;
 
     // --- Grupos del área ---
     const gArea=grupos.filter(g=>g.area===this.area);
@@ -1048,7 +949,8 @@ const App = {
           <select id="repMes" style="flex:2">${MESES.map((m,i)=>`<option value="${i}" ${i===mes?'selected':''}>${m}</option>`).join('')}</select>
           <select id="repAnio" style="flex:1">${[anio-1,anio,anio+1].map(y=>`<option ${y===anio?'selected':''}>${y}</option>`).join('')}</select>
         </div>
-        ${this.esDueno()?`<div class="section-title">Área</div><div class="area-scroll">${areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaRep('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>`:`<div class="muted" style="font-size:12px;margin-top:6px">Área: <b>${areaName(this.area)}</b></div>`}
+        <div class="section-title">Área</div>
+        <div class="area-scroll">${areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaRep('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>
       </div>
 
       <div class="section-title">Bitácora en blanco para imprimir · COFEPRIS</div>
@@ -1189,8 +1091,7 @@ const App = {
     const isDone=(tipo,ref,turno)=>doneSet.has(`${tipo}:${ref}:${turno}`);
     const overdue=(turno,done)=> !done && turno==='TM' && nowT==='TV';
 
-    const areasVista=this.esDueno()?SEED.areas:SEED.areas.filter(a=>a.id===this.area);
-    const areasHTML=areasVista.map(a=>{
+    const areasHTML=SEED.areas.map(a=>{
       const due=cat.filter(c=>c.area===a.id && dueOn(c.fr,today));
       let total=0,done=0,late=0;
       due.forEach(c=>['TM','TV'].forEach(t=>{total++;const d=isDone('cat',c.id,t);if(d)done++;else if(overdue(t,d))late++;}));
@@ -1203,7 +1104,7 @@ const App = {
       </div>`;
     }).join('');
 
-    const colabs=cols.filter(c=>c.rol==='colaborador' && (this.esDueno()||c.area===this.area));
+    const colabs=cols.filter(c=>c.rol==='colaborador');
     const asignByCol={};
     grupos.forEach(g=>{(g.items||[]).forEach(cid=>{ (asignByCol[g.colaboradorId]=asignByCol[g.colaboradorId]||[]).push({cid,turno:g.turno}); });});
     const catById={};cat.forEach(c=>catById[c.id]=c);
@@ -1273,7 +1174,7 @@ const App = {
 
     let body='';
     if(this.supEnfoque==='area'){
-      body=(this.esDueno()?SEED.areas:SEED.areas.filter(a=>a.id===this.area)).map(a=>{let wt=0,wd=0;const cells=dias.map(iso=>{const r=areaDia(a.id,iso);wt+=r.total;wd+=r.done;return cell(iso,r);}).join('');
+      body=SEED.areas.map(a=>{let wt=0,wd=0;const cells=dias.map(iso=>{const r=areaDia(a.id,iso);wt+=r.total;wd+=r.done;return cell(iso,r);}).join('');
         const pct=wt?Math.round(wd/wt*100):0;
         return `<div class="card" style="padding:12px;margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>${a.emoji} ${a.nombre}</b><span class="num">${pct}%</span></div>
@@ -1281,7 +1182,7 @@ const App = {
           <div class="muted" style="font-size:11px;margin-top:6px">${wd}/${wt} en la semana</div></div>`;
       }).join('');
     } else {
-      const colabs=cols.filter(c=>c.rol==='colaborador' && (this.esDueno()||c.area===this.area));
+      const colabs=cols.filter(c=>c.rol==='colaborador');
       body=colabs.map(col=>{let wt=0,wd=0;const cells=dias.map(iso=>{const r=colDia(col,iso);wt+=r.total;wd+=r.done;return cell(iso,r);}).join('');
         const pct=wt?Math.round(wd/wt*100):0;
         return `<div class="card" style="padding:12px;margin-bottom:10px">
@@ -1339,7 +1240,7 @@ const App = {
   async view_inventario(){
     const v=$('#view');
     this.invMode=this.invMode||'conteo';
-    const areaTabs=this._areaScroll('setAreaInv');
+    const areaTabs=`<div class="area-scroll" style="margin-bottom:12px">${SEED.areas.map(a=>`<button class="area-tab ${a.id===this.area?'active':''}" onclick="App.setAreaInv('${a.id}')">${a.emoji} ${a.nombre}</button>`).join('')}</div>`;
     const modeToggle=`<div class="turno-toggle" style="margin-bottom:12px">${
       [['conteo','🔄 Conteo'],['incidentes','⚠️ Incidentes'],['catalogo','📦 Catálogo']].map(([m,l])=>`<button class="${this.invMode===m?'active':''}" style="${this.invMode===m?'background:var(--brand);color:#fff':''}" onclick="App.setInvMode('${m}')">${l}</button>`).join('')
     }</div>`;
